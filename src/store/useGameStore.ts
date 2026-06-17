@@ -7,14 +7,20 @@ interface GameState {
   currentPlayerTurn: Color;
   diceValue: number | null;
   hasRolled: boolean;
-  isAnimating: boolean; // NEW: Animation lock taaki turn overlap na ho
+  isAnimating: boolean;
   
+  // NAYE FEATURES: Game Mode & Start/Exit
+  gameStarted: boolean;
+  activeColors: Color[];
+  
+  startGame: (playerCount: number) => void;
+  exitGame: () => void;
   rollDice: () => void;
   moveToken: (playerColor: Color, tokenId: string) => void;
   passTurn: () => void; 
 }
 
-const initialPlayers: Player[] = ['red', 'green', 'yellow', 'blue'].map((color) => ({
+const getInitialPlayers = (): Player[] => ['red', 'green', 'yellow', 'blue'].map((color) => ({
   id: `player-${color}`,
   color: color as Color,
   isActive: true,
@@ -33,29 +39,50 @@ const getGlobalPosition = (color: Color, relativePos: number): string | number =
 };
 
 export const useGameStore = create<GameState>((set, get) => ({
-  players: initialPlayers,
+  players: getInitialPlayers(),
   currentPlayerTurn: 'red', 
   diceValue: null,
   hasRolled: false,
-  isAnimating: false, // Default false
+  isAnimating: false,
+  gameStarted: false, // Menu dikhane ke liye
+  activeColors: ['red', 'green', 'blue', 'yellow'],
+
+  startGame: (playerCount: number) => {
+    let active: Color[] = [];
+    if (playerCount === 2) active = ['red', 'yellow']; // 2 Player: Aamne-Saamne
+    else if (playerCount === 3) active = ['red', 'green', 'yellow']; 
+    else active = ['red', 'green', 'blue', 'yellow'];
+
+    set({
+      gameStarted: true,
+      activeColors: active,
+      players: getInitialPlayers(), // Reset board
+      currentPlayerTurn: active[0], // Start with Red
+      diceValue: null,
+      hasRolled: false,
+      isAnimating: false
+    });
+  },
+
+  exitGame: () => {
+    set({ gameStarted: false });
+  },
 
   passTurn: () => {
     set((state) => {
-      const colors: Color[] = ['red', 'green', 'yellow', 'blue'];
-      const nextTurn = colors[(colors.indexOf(state.currentPlayerTurn) + 1) % 4];
+      const currentIndex = state.activeColors.indexOf(state.currentPlayerTurn);
+      const nextTurn = state.activeColors[(currentIndex + 1) % state.activeColors.length];
       return { currentPlayerTurn: nextTurn, diceValue: null, hasRolled: false, isAnimating: false };
     });
   },
 
   rollDice: () => {
     const state = get();
-    // Agar dice roll ho chuka hai ya goti move ho rahi hai, toh click block kar do
     if (state.hasRolled || state.isAnimating) return;
     
     const randomNum = Math.floor(Math.random() * 6) + 1;
     set({ diceValue: randomNum, hasRolled: true });
 
-    // AUTO-PASS LOGIC (Advanced AI Check)
     const currentPlayer = state.players.find(p => p.color === state.currentPlayerTurn);
     if (currentPlayer) {
       const hasValidMove = currentPlayer.tokens.some(t => {
@@ -64,7 +91,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         return (t.position + randomNum) <= 57; 
       });
 
-      // Agar koi valid move nahi hai, toh automatically turn pass kar do
       if (!hasValidMove) {
         setTimeout(() => {
           get().passTurn();
@@ -75,7 +101,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   moveToken: (playerColor, tokenId) => {
     const state = get();
-    // Strict Lock: Agar animation chal rahi hai ya aapki turn nahi hai, toh move mat hone do
     if (state.currentPlayerTurn !== playerColor || !state.hasRolled || !state.diceValue || state.isAnimating) return;
 
     const diceVal = state.diceValue;
@@ -89,19 +114,16 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       let newRelativePos = token.position;
       let getsExtraTurn = false;
-      let stepsToMove = 0; // Animation delay calculate karne ke liye
+      let stepsToMove = 0; 
 
-      // 1. BASE LOGIC
       if (token.position === -1) {
         if (diceVal !== 6) return prevState; 
         newRelativePos = 0;
-        stepsToMove = 1; // Base se nikalne ka 1 step count
+        stepsToMove = 1; 
         getsExtraTurn = true; 
-      } 
-      // 2. PATH LOGIC
-      else {
+      } else {
         newRelativePos += diceVal;
-        stepsToMove = diceVal; // Path par utne steps jitna dice aaya
+        stepsToMove = diceVal; 
         if (newRelativePos > 57) return prevState; 
         
         if (newRelativePos === 57) {
@@ -112,17 +134,16 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       token.position = newRelativePos;
 
-      // 3. CUTTING LOGIC (Doosre ki goti katna)
       const newGlobalPos = getGlobalPosition(playerColor, newRelativePos);
       let killedSomeone = false;
       
       if (typeof newGlobalPos === 'number' && !SAFE_POSITIONS_GLOBAL.includes(newGlobalPos)) {
         newPlayers.forEach(p => {
-          if (p.color !== playerColor) {
+          if (p.color !== playerColor && prevState.activeColors.includes(p.color)) {
             p.tokens.forEach(enemyToken => {
               const enemyGlobal = getGlobalPosition(p.color, enemyToken.position);
               if (enemyGlobal === newGlobalPos && enemyToken.position !== -1) {
-                enemyToken.position = -1; // Wapas ghar jao
+                enemyToken.position = -1; 
                 getsExtraTurn = true;    
                 killedSomeone = true;
               }
@@ -131,17 +152,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
       }
 
-      // 4. SMART TURN DELAY (Goti chalne ke baad hi turn badlegi)
       let nextTurn = prevState.currentPlayerTurn;
       if (diceVal === 6 || killedSomeone) getsExtraTurn = true; 
 
       if (!getsExtraTurn) {
-        const colors: Color[] = ['red', 'green', 'yellow', 'blue'];
-        nextTurn = colors[(colors.indexOf(nextTurn) + 1) % 4];
+        const currentIndex = prevState.activeColors.indexOf(nextTurn);
+        nextTurn = prevState.activeColors[(currentIndex + 1) % prevState.activeColors.length];
       }
 
-      // Animation LudoBoard.tsx mein 150ms per step hai. 
-      // Total delay = (steps * 150ms) + 300ms buffer delay.
       const animationTime = (stepsToMove * 150) + 300;
 
       setTimeout(() => {
@@ -149,15 +167,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           currentPlayerTurn: nextTurn, 
           diceValue: null, 
           hasRolled: false,
-          isAnimating: false // Animation khatam, ab agla player khel sakta hai
+          isAnimating: false 
         });
       }, animationTime);
 
-      // Jab tak timeout complete nahi hota, state ko 'isAnimating: true' par lock kar do
-      return { 
-        players: newPlayers,
-        isAnimating: true 
-      };
+      return { players: newPlayers, isAnimating: true };
     });
   }
 }));
