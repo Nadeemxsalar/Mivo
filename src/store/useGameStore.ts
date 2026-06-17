@@ -8,12 +8,11 @@ interface GameState {
   diceValue: number | null;
   hasRolled: boolean;
   isAnimating: boolean;
-  
-  // NAYE FEATURES: Game Mode & Start/Exit
+  activeColors: Color[]; 
   gameStarted: boolean;
-  activeColors: Color[];
+  isRobotMode: boolean; 
   
-  startGame: (playerCount: number) => void;
+  startGame: (playerCount: number, isRobot: boolean) => void;
   exitGame: () => void;
   rollDice: () => void;
   moveToken: (playerColor: Color, tokenId: string) => void;
@@ -44,20 +43,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceValue: null,
   hasRolled: false,
   isAnimating: false,
-  gameStarted: false, // Menu dikhane ke liye
+  gameStarted: false,
+  isRobotMode: false,
   activeColors: ['red', 'green', 'blue', 'yellow'],
 
-  startGame: (playerCount: number) => {
+  startGame: (playerCount: number, isRobot: boolean) => {
     let active: Color[] = [];
-    if (playerCount === 2) active = ['red', 'yellow']; // 2 Player: Aamne-Saamne
+    if (playerCount === 2) active = ['red', 'yellow']; 
     else if (playerCount === 3) active = ['red', 'green', 'yellow']; 
     else active = ['red', 'green', 'blue', 'yellow'];
 
     set({
       gameStarted: true,
+      isRobotMode: isRobot,
       activeColors: active,
-      players: getInitialPlayers(), // Reset board
-      currentPlayerTurn: active[0], // Start with Red
+      players: getInitialPlayers(), 
+      currentPlayerTurn: active[0], 
       diceValue: null,
       hasRolled: false,
       isAnimating: false
@@ -80,7 +81,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (state.hasRolled || state.isAnimating) return;
     
-    const randomNum = Math.floor(Math.random() * 6) + 1;
+    // NAYA FEATURE: Casino-Grade Crypto Randomness (100% Fair Random)
+    let randomNum = Math.floor(Math.random() * 6) + 1;
+    if (typeof window !== 'undefined' && window.crypto) {
+      const array = new Uint32Array(1);
+      window.crypto.getRandomValues(array);
+      randomNum = (array[0] % 6) + 1; // Exact random number between 1 to 6
+    }
+
     set({ diceValue: randomNum, hasRolled: true });
 
     const currentPlayer = state.players.find(p => p.color === state.currentPlayerTurn);
@@ -122,9 +130,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         stepsToMove = 1; 
         getsExtraTurn = true; 
       } else {
+        if (newRelativePos + diceVal > 57) return prevState;
+
         newRelativePos += diceVal;
         stepsToMove = diceVal; 
-        if (newRelativePos > 57) return prevState; 
         
         if (newRelativePos === 57) {
           token.isFinished = true;
