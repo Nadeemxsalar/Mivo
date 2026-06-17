@@ -11,12 +11,14 @@ const StarIcon = ({ color }: { color: string }) => (
   </svg>
 );
 
+// Starting Arrow SVG
 const ArrowIcon = ({ rotation }: { rotation: string }) => (
   <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)" className="absolute w-[60%] h-[60%] drop-shadow-[0_0_5px_rgba(255,255,255,0.8)] z-0" style={{ transform: `rotate(${rotation})` }}>
     <path d="M12 4l-8 8h6v8h4v-8h6z" />
   </svg>
 );
 
+// Winner Crown Icon
 const CrownIcon = () => (
   <svg viewBox="0 0 24 24" fill="#FFD700" className="absolute -top-3 sm:-top-4 w-5 h-5 sm:w-6 sm:h-6 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] z-50">
     <path d="M2 22h20v2H2v-2zm2-2l3-10 5 4 5-4 3 10H4z" />
@@ -26,6 +28,7 @@ const CrownIcon = () => (
   </svg>
 );
 
+// Animated Royal Taj (Crown SVG)
 const CenterTajIcon = () => (
   <svg viewBox="0 0 100 100" fill="none" className="w-[70%] h-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] animate-[subtleBounce_2.5s_ease-in-out_infinite]">
     <defs>
@@ -88,6 +91,7 @@ const BASE_COORDS: Record<Color, number[][]> = {
   blue: [[11,2],[11,3],[12,2],[12,3]]   
 };
 
+// GRID ENGINE
 const PATH_RATIO = 1.15; 
 const TRACK_RATIOS = [1, 1, 1, 1, 1, 1, PATH_RATIO, PATH_RATIO, PATH_RATIO, 1, 1, 1, 1, 1, 1];
 const TOTAL_RATIO = 12 + (3 * PATH_RATIO); 
@@ -126,6 +130,7 @@ const isStarSpot = (r: number, c: number) => {
   return [[6, 1], [1, 8], [8, 13], [13, 6], [8, 2], [6, 12], [2, 6], [12, 8]].some(([sr, sc]) => sr === r && sc === c);
 };
 
+// Check if cell is the starting block
 const getStartDirection = (r: number, c: number) => {
   if (r === 6 && c === 1) return '90deg'; 
   if (r === 1 && c === 8) return '180deg'; 
@@ -140,11 +145,17 @@ export default function LudoBoard() {
   const currentPlayerTurn = useGameStore((state: any) => state.currentPlayerTurn);
   const diceValue = useGameStore((state: any) => state.diceValue);
   const hasRolled = useGameStore((state: any) => state.hasRolled);
+  
   const isRobotMode = useGameStore((state: any) => state.isRobotMode);
   const isAnimatingStore = useGameStore((state: any) => state.isAnimating);
+  const isFastMode = useGameStore((state: any) => state.isFastMode);
+  const animationType = useGameStore((state: any) => state.animationType); // 'jump' or 'smooth'
 
   const visualPosRef = useRef<Record<string, number>>({});
   const [renderTick, setRenderTick] = useState(0);
+
+  // Speed Logic based on user settings
+  const stepDuration = isFastMode ? 80 : 150; 
 
   useEffect(() => {
     players.forEach((p: Player) => {
@@ -168,7 +179,7 @@ export default function LudoBoard() {
 
         if (currentVisPos !== undefined && currentVisPos !== targetPos) {
           
-          // NAYA FEATURE: Goti Kill Rewind Animation
+          // Goti Kill Rewind Animation
           if (targetPos === -1 && currentVisPos > -1) {
             let step = currentVisPos;
             const rewind = () => {
@@ -189,10 +200,10 @@ export default function LudoBoard() {
               visualPosRef.current[t.id] = step;
               setRenderTick(v => v + 1);
               if (step < targetPos) {
-                setTimeout(hop, 150); 
+                setTimeout(hop, stepDuration); 
               }
             };
-            setTimeout(hop, 150);
+            setTimeout(hop, stepDuration);
           } else {
             visualPosRef.current[t.id] = targetPos;
             setRenderTick(v => v + 1);
@@ -200,7 +211,7 @@ export default function LudoBoard() {
         }
       });
     });
-  }, [players]);
+  }, [players, stepDuration]);
 
   // =====================================
   // ROBOT AI TOKEN MOVEMENT LOGIC
@@ -216,16 +227,16 @@ export default function LudoBoard() {
             return (t.position + diceValue) <= 57;
           });
 
-          if (validTokens.length > 0) {
-            // Robot randomly selects a valid token
+          // Robot selects randomly if more than 1 options are available
+          if (validTokens.length > 1) {
             const chosenToken = validTokens[Math.floor(Math.random() * validTokens.length)];
             moveToken(currentPlayerTurn, chosenToken.id);
           }
         }
-      }, 700); // Waits a moment after dice roll before moving token
+      }, isFastMode ? 400 : 700); 
       return () => clearTimeout(timer);
     }
-  }, [isRobotMode, currentPlayerTurn, hasRolled, diceValue, isAnimatingStore, players, moveToken]);
+  }, [isRobotMode, currentPlayerTurn, hasRolled, diceValue, isAnimatingStore, players, moveToken, isFastMode]);
 
   const allTokens = useMemo(() => {
     let tokensArr: any[] = [];
@@ -291,18 +302,32 @@ export default function LudoBoard() {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-15%); }
         }
-        /* KILL ANIMATION CSS: Rapid Spin when dying */
-        @keyframes gotiKill {
-          0% { transform: scale(1) rotate(0deg); opacity: 1; }
-          50% { transform: scale(0.6) rotate(180deg); opacity: 0.8; }
-          100% { transform: scale(0.4) rotate(360deg); opacity: 0.5; }
+        
+        /* NEW PHYSICS: Real Hop Animation for 'Jump' mode */
+        @keyframes hopAnim {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-25%) scale(1.15); }
         }
-        .token-slide-hop {
-          transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        .anim-hop {
+          animation: hopAnim ${stepDuration}ms ease-in-out;
+        }
+
+        /* NEW FEATURE: Flash & Shockwave effects */
+        @keyframes gotiKillSpin {
+          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: drop-shadow(0 0 20px red) brightness(2); }
+          50% { transform: scale(0.6) rotate(180deg); opacity: 0.8; filter: drop-shadow(0 0 30px red) brightness(1.5); }
+          100% { transform: scale(0.4) rotate(360deg); opacity: 0; filter: drop-shadow(0 0 0px red) brightness(1); }
         }
         .anim-kill {
-          animation: gotiKill 0.2s linear infinite;
-          filter: brightness(1.5);
+          animation: gotiKillSpin 0.3s linear;
+        }
+
+        @keyframes winShockwave {
+          0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8); transform: scale(1); opacity: 1; }
+          100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.5); opacity: 0; }
+        }
+        .anim-shockwave {
+          animation: winShockwave 0.6s ease-out;
         }
       `}</style>
       
@@ -354,6 +379,7 @@ export default function LudoBoard() {
           <polygon points="100,0 100,100 50,50" fill="#FBC02D" /> 
           <polygon points="0,100 100,100 50,50" fill="#1565C0" /> 
           <polygon points="0,0 0,100 50,50" fill="#D32F2F" /> 
+          
           <line x1="0" y1="0" x2="100" y2="100" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
           <line x1="100" y1="0" x2="0" y2="100" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
           <polygon points="0,0 100,0 100,100 0,100" fill="url(#glass)" pointerEvents="none" />
@@ -372,8 +398,9 @@ export default function LudoBoard() {
           const trueStoreToken = players.find((p: Player) => p.color === t.playerColor)?.tokens[t.index];
           const isAnimating = t.visPos !== trueStoreToken?.position;
           
-          // Detect if token is currently being killed
+          // States for Visual Effects
           const isGettingKilled = trueStoreToken?.position === -1 && t.visPos > -1;
+          const justFinished = t.visPos === 57 && trueStoreToken?.position === 57 && isAnimating;
           
           const canMove = !isAnimating && !isGettingKilled && currentPlayerTurn === t.playerColor && diceValue !== null && 
                          (t.position !== -1 || diceValue === 6) && (t.position + diceValue <= 57);
@@ -405,22 +432,31 @@ export default function LudoBoard() {
             else if (t.playerColor === 'blue') { shiftX = 0; shiftY = 28; }
           }
 
+          // DYNAMIC TRANSITION BASED ON SETTINGS (Smooth or Jump)
+          const isJumpingNow = isAnimating && animationType === 'jump' && t.visPos > -1 && t.visPos < 57;
+          
           return (
             <div 
               key={t.id}
-              className={`absolute pointer-events-auto token-slide-hop transform-gpu will-change-transform flex items-center justify-center ${canMove ? 'z-50' : 'z-40'} ${isGettingKilled ? 'z-50' : ''}`}
+              className={`absolute pointer-events-auto transform-gpu flex items-center justify-center ${canMove ? 'z-50' : 'z-40'} ${isGettingKilled ? 'z-50' : ''}`}
               style={{
                 width: `${getTrackSize(t.c)}%`,
                 height: `${getTrackSize(t.r)}%`,
                 top: `${getTrackPos(t.r)}%`,
                 left: `${getTrackPos(t.c)}%`,
-                transform: `translate(${shiftX}%, ${shiftY}%) scale(${scale})`
+                transform: `translate(${shiftX}%, ${shiftY}%) scale(${scale})`,
+                transition: isGettingKilled ? 'none' : `top ${stepDuration}ms linear, left ${stepDuration}ms linear, transform ${stepDuration}ms ease-out`
               }}
             >
+              {/* NEW SHOCKWAVE EFFECT WHEN TOKEN WINS */}
+              {justFinished && <div className="absolute inset-0 rounded-full anim-shockwave pointer-events-none" />}
+
               <button
                 onClick={() => moveToken(t.playerColor, t.id)}
                 disabled={!canMove}
-                className={`relative rounded-full group transition-transform ${canMove ? 'cursor-pointer hover:scale-110 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] animate-pulse' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
+                // FIXED PHYSICS ENGINE: 'anim-hop' for Jump, nothing for smooth
+                // GLOWING VALID TOKENS: ring-4 ring-white for valid moves
+                className={`relative rounded-full group transition-transform ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer hover:scale-110 drop-shadow-[0_0_15px_rgba(255,255,255,1)] ring-4 ring-white animate-pulse' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
                 style={{ width: `${TOKEN_SIZE}cqw`, height: `${TOKEN_SIZE}cqw` }}
               >
                 {t.isFinished && <CrownIcon />}
@@ -431,7 +467,6 @@ export default function LudoBoard() {
                     <div className="w-[50%] h-[25%] bg-white/70 rounded-full blur-[0.5px]" />
                   </div>
                 </div>
-                {canMove && <div className="absolute -inset-2 border-[3px] border-white rounded-full animate-ping opacity-50 pointer-events-none z-0" />}
               </button>
             </div>
           );

@@ -1,6 +1,6 @@
 // src/store/useGameStore.ts
 import { create } from 'zustand';
-import { Color, Player, START_OFFSETS, SAFE_POSITIONS_GLOBAL } from '../types/game';
+import { Color, Player, START_OFFSETS, SAFE_POSITIONS_GLOBAL, Token } from '../types/game';
 
 interface GameState {
   players: Player[];
@@ -12,6 +12,12 @@ interface GameState {
   gameStarted: boolean;
   isRobotMode: boolean; 
   
+  // Settings & Preferences States
+  animationType: 'jump' | 'smooth';
+  isFastMode: boolean;
+  soundEnabled: boolean; // FEATURE 3: Sound toggle support state
+  
+  setPreferences: (pref: { animationType?: 'jump' | 'smooth', isFastMode?: boolean, soundEnabled?: boolean }) => void;
   startGame: (playerCount: number, isRobot: boolean) => void;
   exitGame: () => void;
   rollDice: () => void;
@@ -46,6 +52,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameStarted: false,
   isRobotMode: false,
   activeColors: ['red', 'green', 'blue', 'yellow'],
+  
+  // Default Settings Parameters
+  animationType: 'jump',
+  isFastMode: false,
+  soundEnabled: true,
+
+  setPreferences: (pref) => set((state) => ({ ...state, ...pref })),
 
   startGame: (playerCount: number, isRobot: boolean) => {
     let active: Color[] = [];
@@ -81,28 +94,36 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (state.hasRolled || state.isAnimating) return;
     
-    // NAYA FEATURE: Casino-Grade Crypto Randomness (100% Fair Random)
+    // Casino-Grade Crypto Randomness (100% Fair Random)
     let randomNum = Math.floor(Math.random() * 6) + 1;
     if (typeof window !== 'undefined' && window.crypto) {
       const array = new Uint32Array(1);
       window.crypto.getRandomValues(array);
-      randomNum = (array[0] % 6) + 1; // Exact random number between 1 to 6
+      randomNum = (array[0] % 6) + 1; 
     }
 
     set({ diceValue: randomNum, hasRolled: true });
 
     const currentPlayer = state.players.find(p => p.color === state.currentPlayerTurn);
     if (currentPlayer) {
-      const hasValidMove = currentPlayer.tokens.some(t => {
+      // Find all tokens that can legally move
+      const validTokens = currentPlayer.tokens.filter(t => {
         if (t.isFinished) return false;
         if (t.position === -1) return randomNum === 6; 
         return (t.position + randomNum) <= 57; 
       });
 
-      if (!hasValidMove) {
+      if (validTokens.length === 0) {
+        // No moves possible -> Auto Pass turn
         setTimeout(() => {
           get().passTurn();
-        }, 1200); 
+        }, state.isFastMode ? 600 : 1200); 
+      } 
+      // FEATURE 1: AUTO-MOVE SMART ASSIST (If only 1 token can move, play it automatically)
+      else if (validTokens.length === 1 && (!state.isRobotMode || state.currentPlayerTurn === 'yellow')) {
+        setTimeout(() => {
+          get().moveToken(state.currentPlayerTurn, validTokens[0].id);
+        }, state.isFastMode ? 400 : 800);
       }
     }
   },
@@ -151,7 +172,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           if (p.color !== playerColor && prevState.activeColors.includes(p.color)) {
             p.tokens.forEach(enemyToken => {
               const enemyGlobal = getGlobalPosition(p.color, enemyToken.position);
-              if (enemyGlobal === newGlobalPos && enemyToken.position !== -1) {
+              if (enemyGlobal === enemyGlobal && enemyGlobal === newGlobalPos && enemyToken.position !== -1) {
                 enemyToken.position = -1; 
                 getsExtraTurn = true;    
                 killedSomeone = true;
@@ -169,7 +190,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextTurn = prevState.activeColors[(currentIndex + 1) % prevState.activeColors.length];
       }
 
-      const animationTime = (stepsToMove * 150) + 300;
+      const stepTime = prevState.isFastMode ? 80 : 150;
+      const animationTime = (stepsToMove * stepTime) + 300;
 
       setTimeout(() => {
         useGameStore.setState({ 
