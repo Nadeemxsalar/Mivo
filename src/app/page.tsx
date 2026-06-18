@@ -94,6 +94,9 @@ const PlayerBox = memo(({ color, name }: { color: Color, name: string }) => {
   }, [isRobotMode, isActive, color, hasRolled, isAnimating, isRolling, isFastMode, handleRollClick]);
 
   const finalDiceValue = isRolling ? displayValue : (diceValue !== null ? diceValue : displayValue);
+  
+  // NAYA FEATURE: 6 aane par aag lagne wala logic (Lucky 6 Fire Burst)
+  const showFire = !isRolling && diceValue === 6 && isActive;
 
   const colorStyles: Record<Color, { bg: string, ring: string }> = {
     red: { bg: 'bg-gradient-to-br from-[#ff5252] to-[#b71c1c]', ring: 'ring-red-500/80' },
@@ -118,6 +121,14 @@ const PlayerBox = memo(({ color, name }: { color: Color, name: string }) => {
       </div>
       
       <div className={`w-14 h-14 sm:w-16 sm:h-16 lg:w-24 lg:h-24 bg-slate-900 border-[3px] lg:border-4 border-white/10 rounded-xl lg:rounded-3xl shadow-inner flex items-center justify-center relative transition-all duration-300 overflow-visible ${isActive ? `ring-2 lg:ring-4 ${currentStyle.ring}` : ''}`}>
+        
+        {/* NAYA FEATURE: LUCKY 6 FIRE BURST EFFECT */}
+        <AnimatePresence>
+          {showFire && (
+            <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1.5, opacity: 0.8 }} exit={{ scale: 2, opacity: 0 }} className="absolute inset-0 bg-orange-500 rounded-full blur-[12px] z-0 pointer-events-none" />
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
           {isActive ? (
             <motion.div key="active-dice" variants={rollVariants} initial="idle" animate={isRolling ? "rolling" : "idle"} className="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 absolute z-20" style={{ transformStyle: "preserve-3d" }}>
@@ -191,7 +202,7 @@ export default function Home() {
 
   if (!gameStarted) {
     return (
-      <main className="fixed inset-0 w-screen h-[100dvh] bg-[#060D1A] flex items-center justify-center select-none overflow-hidden p-4">
+      <main className="fixed inset-0 w-screen h-[100dvh] bg-[#060D1A] flex items-center justify-center select-none overflow-hidden p-4 sm:p-6">
         <style>{`
           @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); } 50% { transform: translateY(-20px) rotate(10deg) scale(1.1); } }
           /* GPU Optimization applied to particles */
@@ -211,7 +222,7 @@ export default function Home() {
         <button onClick={() => setIsSettingsOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-slate-800/80 hover:bg-slate-700 border border-white/10 rounded-full shadow-lg transition-transform hover:scale-110 active:scale-95 text-xl transform-gpu">⚙️</button>
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
-        <motion.div initial={{ scale: 0.8, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="relative z-10 w-full max-w-lg flex flex-col items-center gap-8 transform-gpu will-change-transform">
+        <motion.div initial={{ scale: 0.8, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="relative z-10 w-full max-w-lg flex flex-col items-center gap-6 sm:gap-8 transform-gpu will-change-transform">
           
           <div className="space-y-1 text-center bg-slate-900/40 backdrop-blur-md px-10 py-6 rounded-full border border-white/5 shadow-2xl">
             <h1 className="text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 via-yellow-500 to-red-600 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] tracking-widest">LUDO</h1>
@@ -269,15 +280,21 @@ export default function Home() {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       <div className="relative z-20 w-full h-full max-w-[500px] lg:max-w-[1200px] grid grid-cols-2 lg:grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto_auto] lg:grid-rows-[auto_1fr_auto] gap-y-3 sm:gap-y-4 lg:gap-x-8 lg:gap-y-0 items-center justify-items-center content-center mx-auto min-h-0 min-w-0">
-        <div className="col-start-1 row-start-1 lg:col-start-1 lg:row-start-1 justify-self-start lg:justify-self-end self-end lg:self-start lg:mt-6"><PlayerBox color="red" name="Player 1" /></div>
-        <div className="col-start-2 row-start-1 lg:col-start-3 lg:row-start-1 justify-self-end lg:justify-self-start self-end lg:self-start lg:mt-6"><PlayerBox color="green" name="Player 2" /></div>
+        
+        {/* NAMES UPDATED HERE: Clockwise Sequence */}
+        <div className="col-start-1 row-start-1 lg:col-start-1 lg:row-start-1 justify-self-start lg:justify-self-end self-end lg:self-start lg:mt-6"><PlayerBox color="red" name="Player 2" /></div>
+        <div className="col-start-2 row-start-1 lg:col-start-3 lg:row-start-1 justify-self-end lg:justify-self-start self-end lg:self-start lg:mt-6"><PlayerBox color="green" name="Player 3" /></div>
+        
         <div className="col-span-2 row-start-2 lg:col-start-2 lg:col-span-1 lg:row-start-1 lg:row-span-3 flex items-center justify-center w-full min-h-0 min-w-0">
           <div className="relative aspect-square w-[min(98vw,calc(100dvh-190px))] lg:w-[85vh] lg:h-[85vh] bg-slate-900 rounded-2xl lg:rounded-[3rem] p-1.5 lg:p-2 border-[4px] lg:border-8 border-[#0f172a] shadow-[0_0_50px_rgba(0,0,0,0.9)] shrink-0 flex items-center justify-center transform-gpu">
             <LudoBoard />
           </div>
         </div>
-        <div className="col-start-1 row-start-3 lg:col-start-1 lg:row-start-3 justify-self-start lg:justify-self-end self-start lg:self-end lg:mb-6"><PlayerBox color="blue" name="Player 3" /></div>
+        
+        {/* NAMES UPDATED HERE: Clockwise Sequence */}
+        <div className="col-start-1 row-start-3 lg:col-start-1 lg:row-start-3 justify-self-start lg:justify-self-end self-start lg:self-end lg:mb-6"><PlayerBox color="blue" name="Player 1" /></div>
         <div className="col-start-2 row-start-3 lg:col-start-3 lg:row-start-3 justify-self-end lg:justify-self-start self-start lg:self-end lg:mb-6"><PlayerBox color="yellow" name="YOU" /></div>
+        
       </div>
     </main>
   );

@@ -145,7 +145,8 @@ export default function LudoBoard() {
   const isAnimatingStore = useGameStore((state: any) => state.isAnimating);
   const isFastMode = useGameStore((state: any) => state.isFastMode);
   const animationType = useGameStore((state: any) => state.animationType);
-
+  const leaderboard = useGameStore((state: any) => state.leaderboard);
+  
   const hoveredTokenId = useGameStore((state: any) => state.hoveredTokenId);
   const setHoveredToken = useGameStore((state: any) => state.setHoveredToken);
 
@@ -166,7 +167,7 @@ export default function LudoBoard() {
   }, []); 
 
   // =====================================
-  // ADVANCED STEP-BY-STEP & KILL REWIND ENGINE
+  // ADVANCED STEP-BY-STEP & SILKY SMOOTH REWIND KILL ENGINE
   // =====================================
   useEffect(() => {
     players.forEach((p: Player) => {
@@ -175,17 +176,18 @@ export default function LudoBoard() {
         const currentVisPos = visualPosRef.current[t.id];
 
         if (currentVisPos !== undefined && currentVisPos !== targetPos) {
+          
           if (targetPos === -1 && currentVisPos > -1) {
             let step = currentVisPos;
             const rewind = () => {
-              step = Math.max(-1, step - 3); 
+              step = Math.max(-1, step - 1); 
               visualPosRef.current[t.id] = step;
               setRenderTick(v => v + 1);
               if (step > -1) {
-                setTimeout(rewind, 20); 
+                setTimeout(rewind, isFastMode ? 25 : 45); 
               }
             };
-            setTimeout(rewind, 20);
+            setTimeout(rewind, isFastMode ? 25 : 45);
           } 
           else if (targetPos > currentVisPos) {
             let step = currentVisPos;
@@ -205,7 +207,7 @@ export default function LudoBoard() {
         }
       });
     });
-  }, [players, stepDuration]);
+  }, [players, stepDuration, isFastMode]);
 
   // =====================================
   // ROBOT AI TOKEN MOVEMENT LOGIC
@@ -221,7 +223,7 @@ export default function LudoBoard() {
             return (t.position + diceValue) <= 57;
           });
 
-          if (validTokens.length > 1) {
+          if (validTokens.length > 0) {
             const chosenToken = validTokens[Math.floor(Math.random() * validTokens.length)];
             moveToken(currentPlayerTurn, chosenToken.id);
           }
@@ -288,9 +290,7 @@ export default function LudoBoard() {
     );
   }, []);
 
-  // =====================================
-  // GHOST TRACE CALCULATION (Where will the token land?)
-  // =====================================
+  // Ghost Trace Calculation
   let ghostPos = null;
   if (hoveredTokenId && !isAnimatingStore && diceValue !== null && hasRolled) {
     const activePlayer = players.find((p: Player) => p.color === currentPlayerTurn);
@@ -301,12 +301,12 @@ export default function LudoBoard() {
       
       if (targetP === -1 && diceValue === 6) targetP = 0;
       else if (targetP > -1 && targetP + diceValue <= 57) targetP += diceValue;
-      else targetP = -2; 
+      else targetP = -2; // invalid move
 
       if (targetP > -1) {
         let gr = 0, gc = 0;
         if (targetP >= 57) {
-          gr = 7; gc = 7; 
+          gr = 7; gc = 7; // Home
         } else if (targetP <= 50) {
           const gPos = (START_OFFSETS[currentPlayerTurn as Color] + targetP) % 52;
           [gr, gc] = PATH_COORDS[gPos];
@@ -320,45 +320,64 @@ export default function LudoBoard() {
 
   return (
     <div className="relative w-full h-full aspect-square bg-slate-800 overflow-hidden shadow-inner @container">
-      {/* ADVANCED ADVANCED NEON INTERACTIVE ANIMATIONS */}
+      {/* ADVANCED PHYSICS & ANIMATIONS */}
       <style>{`
         @keyframes subtleBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15%); } }
-        @keyframes hopAnim { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-25%) scale(1.15); } }
-        .anim-hop { animation: hopAnim ${stepDuration}ms ease-in-out; }
         
+        /* 3D Forward Hop Easing */
+        @keyframes hopAnim { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-28%) scale(1.18); } }
+        .anim-hop { animation: hopAnim ${stepDuration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite; }
+        
+        /* Smooth Reverse Kill Animation */
         @keyframes gotiKillSpin { 
-          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: drop-shadow(0 0 20px red) brightness(2); } 
-          50% { transform: scale(0.6) rotate(180deg); opacity: 0.8; filter: drop-shadow(0 0 30px red) brightness(1.5); } 
-          100% { transform: scale(0.4) rotate(360deg); opacity: 0; filter: drop-shadow(0 0 0px red) brightness(1); } 
+          0% { transform: scale(1.1) rotate(0deg); filter: drop-shadow(0 0 15px #ef4444) brightness(1.8); } 
+          100% { transform: scale(0.8) rotate(-720deg); filter: drop-shadow(0 0 5px #ef4444) brightness(1.2); } 
         }
-        .anim-kill { animation: gotiKillSpin 0.3s linear; }
+        .anim-kill { animation: gotiKillSpin 0.25s linear infinite !important; }
         
         @keyframes winShockwave { 
-          0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8); transform: scale(1); opacity: 1; } 
-          100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.5); opacity: 0; } 
+          0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.9); transform: scale(1); opacity: 1; } 
+          100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.6); opacity: 0; } 
         }
         .anim-shockwave { animation: winShockwave 0.6s ease-out; }
 
-        /* NAYA FEATURE: UNIQUE HIGH-CTR PLAYABLE SELECTION PHYSICS */
-        @keyframes neonBreath {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 8px #fff, 0 0 15px currentColor, 0 0 30px currentColor; filter: brightness(1.3); }
-          50% { transform: scale(1.06); box-shadow: 0 0 4px #fff, 0 0 8px currentColor, 0 0 15px currentColor; filter: brightness(1); }
-        }
-        @keyframes energyRipple {
-          0% { transform: scale(0.8); opacity: 0.9; }
-          100% { transform: scale(1.8); opacity: 0; }
+        /* NAYA FIX: Clean Levitating Float Animation (No Color Washout) */
+        @keyframes gentleLevitate {
+          0%, 100% { transform: translateY(0) scale(1.08); }
+          50% { transform: translateY(-12%) scale(1.08); }
         }
         .ultra-playable-btn {
-          animation: neonBreath 1s ease-in-out infinite !important;
-          border: 2.5px solid #ffffff !important;
+          animation: gentleLevitate 1.2s ease-in-out infinite !important;
+          border: 2px solid white !important;
+          box-shadow: 0 6px 12px rgba(0,0,0,0.5) !important; /* Normal shadow, no glowing washout */
         }
-        .energy-ripple-wave {
-          animation: energyRipple 1s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+        
+        /* Expanding Target Ring for playable token */
+        @keyframes targetPulse {
+          0% { transform: scale(1); opacity: 0.8; border-width: 3px; }
+          100% { transform: scale(1.8); opacity: 0; border-width: 1px; }
+        }
+        .target-ring-pulse {
+          animation: targetPulse 1.2s ease-out infinite;
+          border-style: solid;
         }
       `}</style>
       
       {/* LAYER 1: The Walking Grid */}
       {renderStaticGrid}
+
+      {/* Active Live Leaderboard Widget */}
+      {leaderboard && leaderboard.length > 0 && leaderboard.some((l: any) => l.finishedCount > 0) && (
+        <div className="absolute top-1 left-1/2 -translate-x-1/2 z-[60] bg-slate-900/60 backdrop-blur-md border border-white/20 px-3 py-1 rounded-full shadow-lg flex gap-3 pointer-events-none transition-opacity duration-300">
+          {leaderboard.filter((l: any) => l.finishedCount > 0).map((l: any, idx: number) => (
+            <div key={l.color} className="flex items-center gap-1">
+              <span className="text-[8px] font-black text-white">{idx + 1}</span>
+              <div className="w-2 h-2 rounded-full border border-white/50" style={{ backgroundColor: colors[l.color as Color] }} />
+              <span className="text-[10px] font-bold text-white">{l.finishedCount}/4</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* LAYER 2: PREMIUM COMPACT BASES */}
       <div className="absolute top-0 left-0 bg-[#E53935] z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] border-r border-b border-black/30" style={{ width: BASE_CONTAINER_PCT, height: BASE_CONTAINER_PCT }}>
@@ -482,22 +501,19 @@ export default function LudoBoard() {
             >
               {justFinished && <div className="absolute inset-0 rounded-full anim-shockwave pointer-events-none" />}
 
-              {/* NAYA FEATURE LAYER: Rotating Dashed Orbit Ring Around Playable Tokens */}
+              {/* Rotating Dashed Orbit Ring Around Playable Tokens */}
               {canMove && (
                 <div 
                   className="absolute inset-[-25%] rounded-full opacity-70 pointer-events-none z-0" 
-                  style={{ 
-                    border: `1.5px dashed ${colors[t.playerColor as Color]}`,
-                    animation: 'spin 5s linear infinite'
-                  }} 
+                  style={{ border: `1.5px dashed ${colors[t.playerColor as Color]}`, animation: 'spin 5s linear infinite' }} 
                 />
               )}
 
-              {/* NAYA FEATURE LAYER: Energy Ripple Wave Burst */}
+              {/* NAYA FIX: Clean Target Pulse Ring instead of washout energy ripple */}
               {canMove && (
                 <div 
-                  className="absolute inset-0 rounded-full pointer-events-none z-0 energy-ripple-wave" 
-                  style={{ backgroundColor: colors[t.playerColor as Color] }} 
+                  className="absolute inset-0 rounded-full pointer-events-none z-0 target-ring-pulse" 
+                  style={{ borderColor: colors[t.playerColor as Color] }} 
                 />
               )}
 
@@ -506,13 +522,9 @@ export default function LudoBoard() {
                 onMouseEnter={() => canMove && setHoveredToken(t.id)}
                 onMouseLeave={() => setHoveredToken(null)}
                 disabled={!canMove}
-                // FIXED & POWERED: 'ultra-playable-btn' adds stunning customized bloom neon glow
-                className={`relative rounded-full group transition-all ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer scale-105 ultra-playable-btn' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
-                style={{ 
-                  width: `${TOKEN_SIZE}cqw`, 
-                  height: `${TOKEN_SIZE}cqw`,
-                  color: colors[t.playerColor as Color] // strictly feeds currentColor to CSS shadow
-                }}
+                // NAYA FIX: Clean 'ultra-playable-btn' animation, no more washed out colors!
+                className={`relative rounded-full group transition-all ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer ultra-playable-btn' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
+                style={{ width: `${TOKEN_SIZE}cqw`, height: `${TOKEN_SIZE}cqw` }}
               >
                 {t.isFinished && <CrownIcon />}
                 

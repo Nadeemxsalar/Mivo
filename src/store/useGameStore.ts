@@ -17,12 +17,11 @@ interface GameState {
   isFastMode: boolean;
   soundEnabled: boolean;
   
-  // NAYE ADVANCED FEATURES STATES
   leaderboard: { color: Color; finishedCount: number }[];
-  hoveredTokenId: string | null; // For Path Trace preview
+  hoveredTokenId: string | null; 
   
   setPreferences: (pref: { animationType?: 'jump' | 'smooth', isFastMode?: boolean, soundEnabled?: boolean }) => void;
-  setHoveredToken: (tokenId: string | null) => void; // Path trace indicator state setter
+  setHoveredToken: (tokenId: string | null) => void; 
   startGame: (playerCount: number, isRobot: boolean) => void;
   exitGame: () => void;
   rollDice: () => void;
@@ -31,7 +30,8 @@ interface GameState {
   updateLeaderboard: () => void;
 }
 
-const getInitialPlayers = (): Player[] => ['red', 'green', 'yellow', 'blue'].map((color) => ({
+// TURN SEQUENCE FIX: Strict Clockwise Order (YOU -> P1 -> P2 -> P3)
+const getInitialPlayers = (): Player[] => ['yellow', 'blue', 'red', 'green'].map((color) => ({
   id: `player-${color}`,
   color: color as Color,
   isActive: true,
@@ -51,18 +51,20 @@ const getGlobalPosition = (color: Color, relativePos: number): string | number =
 
 export const useGameStore = create<GameState>((set, get) => ({
   players: getInitialPlayers(),
-  currentPlayerTurn: 'red', 
+  currentPlayerTurn: 'yellow', // User (YOU) always gets the first turn now!
   diceValue: null,
   hasRolled: false,
   isAnimating: false,
   gameStarted: false,
   isRobotMode: false,
-  activeColors: ['red', 'green', 'blue', 'yellow'],
+  
+  // FIXED DEFAULT SEQUENCE: YOU (Yellow) -> P1 (Blue) -> P2 (Red) -> P3 (Green)
+  activeColors: ['yellow', 'blue', 'red', 'green'],
+  
   animationType: 'jump',
   isFastMode: false,
   soundEnabled: true,
   
-  // Initializing new features states cleanly
   leaderboard: [],
   hoveredTokenId: null,
 
@@ -83,16 +85,18 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startGame: (playerCount: number, isRobot: boolean) => {
     let active: Color[] = [];
-    if (playerCount === 2) active = ['red', 'yellow']; 
-    else if (playerCount === 3) active = ['red', 'green', 'yellow']; 
-    else active = ['red', 'green', 'blue', 'yellow'];
+    
+    // Exact mapping for 2, 3, and 4 players based on the new fixed sequence
+    if (playerCount === 2) active = ['yellow', 'red']; 
+    else if (playerCount === 3) active = ['yellow', 'blue', 'red']; 
+    else active = ['yellow', 'blue', 'red', 'green'];
 
     set({
       gameStarted: true,
       isRobotMode: isRobot,
       activeColors: active,
       players: getInitialPlayers(), 
-      currentPlayerTurn: active[0], 
+      currentPlayerTurn: active[0], // Ensures 'yellow' triggers first
       diceValue: null,
       hasRolled: false,
       isAnimating: false,
@@ -117,6 +121,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (state.hasRolled || state.isAnimating) return;
     
+    // 100% Fair Crypto Random Logic
     let randomNum = Math.floor(Math.random() * 6) + 1;
     if (typeof window !== 'undefined' && window.crypto) {
       const array = new Uint32Array(1);
@@ -134,13 +139,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         return (t.position + randomNum) <= 57; 
       });
 
-      // FEATURE 3: SMART SNAP NO-MOVE AUTO SKIP (0ms Lag Pass Turn)
+      // 0ms Lag Pass Turn
       if (validTokens.length === 0) {
         setTimeout(() => {
           get().passTurn();
-        }, state.isFastMode ? 200 : 400); // Super optimized instant pass execution
+        }, state.isFastMode ? 200 : 400); 
       } 
-      // AUTO-MOVE SMART ASSIST
+      // Auto-Move Smart Assist
       else if (validTokens.length === 1 && (!state.isRobotMode || state.currentPlayerTurn === 'yellow')) {
         setTimeout(() => {
           get().moveToken(state.currentPlayerTurn, validTokens[0].id);
@@ -156,7 +161,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const diceVal = state.diceValue;
 
     set((prevState) => {
-      // Memory Optimization: Slice variables to strictly offload calculations
+      // Memory Optimization: Strict object slicing
       const newPlayers = JSON.parse(JSON.stringify(prevState.players)) as Player[];
       const playerIndex = newPlayers.findIndex(p => p.color === playerColor);
       const token = newPlayers[playerIndex].tokens.find(t => t.id === tokenId);
@@ -222,7 +227,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           isAnimating: false,
           hoveredTokenId: null
         });
-        // Garbage Collection and Leaderboard sync at the tail-end of action
         get().updateLeaderboard();
       }, animationTime);
 
