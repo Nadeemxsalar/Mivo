@@ -150,6 +150,11 @@ export default function LudoBoard() {
   const hoveredTokenId = useGameStore((state: any) => state.hoveredTokenId);
   const setHoveredToken = useGameStore((state: any) => state.setHoveredToken);
 
+  // NEW ADVANCED STORE STATES CONNECTED
+  const recommendedTokenId = useGameStore((state: any) => state.recommendedTokenId);
+  const safeTokens = useGameStore((state: any) => state.safeTokens);
+  const ragePlayers = useGameStore((state: any) => state.ragePlayers);
+
   const visualPosRef = useRef<Record<string, number>>({});
   const [renderTick, setRenderTick] = useState(0);
 
@@ -176,7 +181,6 @@ export default function LudoBoard() {
         const currentVisPos = visualPosRef.current[t.id];
 
         if (currentVisPos !== undefined && currentVisPos !== targetPos) {
-          
           if (targetPos === -1 && currentVisPos > -1) {
             let step = currentVisPos;
             const rewind = () => {
@@ -209,30 +213,6 @@ export default function LudoBoard() {
     });
   }, [players, stepDuration, isFastMode]);
 
-  // =====================================
-  // ROBOT AI TOKEN MOVEMENT LOGIC
-  // =====================================
-  useEffect(() => {
-    if (isRobotMode && currentPlayerTurn !== 'yellow' && hasRolled && diceValue !== null && !isAnimatingStore) {
-      const timer = setTimeout(() => {
-        const activePlayer = players.find((p: Player) => p.color === currentPlayerTurn);
-        if (activePlayer) {
-          const validTokens = activePlayer.tokens.filter((t: Token) => {
-            if (t.isFinished) return false;
-            if (t.position === -1) return diceValue === 6;
-            return (t.position + diceValue) <= 57;
-          });
-
-          if (validTokens.length > 0) {
-            const chosenToken = validTokens[Math.floor(Math.random() * validTokens.length)];
-            moveToken(currentPlayerTurn, chosenToken.id);
-          }
-        }
-      }, isFastMode ? 400 : 700); 
-      return () => clearTimeout(timer);
-    }
-  }, [isRobotMode, currentPlayerTurn, hasRolled, diceValue, isAnimatingStore, players, moveToken, isFastMode]);
-
   const allTokens = useMemo(() => {
     let tokensArr: any[] = [];
     players.forEach((p: Player) => {
@@ -241,7 +221,7 @@ export default function LudoBoard() {
         const playerColor = p.color as Color;
         const visPos = visualPosRef.current[t.id] ?? t.position;
         
-        if (t.isFinished || visPos >= 57) {
+        if (t.isFinished || visPos >= 56) { // EXACT WIN CONFIGURATION
           r = 7; c = 7; 
         } else if (visPos === -1) {
           [r, c] = BASE_COORDS[playerColor][index]; 
@@ -300,13 +280,13 @@ export default function LudoBoard() {
       let targetP = hoveredT.position;
       
       if (targetP === -1 && diceValue === 6) targetP = 0;
-      else if (targetP > -1 && targetP + diceValue <= 57) targetP += diceValue;
-      else targetP = -2; // invalid move
+      else if (targetP > -1 && targetP + diceValue <= 56) targetP += diceValue;
+      else targetP = -2; 
 
       if (targetP > -1) {
         let gr = 0, gc = 0;
-        if (targetP >= 57) {
-          gr = 7; gc = 7; // Home
+        if (targetP >= 56) { 
+          gr = 7; gc = 7; 
         } else if (targetP <= 50) {
           const gPos = (START_OFFSETS[currentPlayerTurn as Color] + targetP) % 52;
           [gr, gc] = PATH_COORDS[gPos];
@@ -320,66 +300,33 @@ export default function LudoBoard() {
 
   return (
     <div className="relative w-full h-full aspect-square bg-slate-800 overflow-hidden shadow-inner @container">
-      {/* ADVANCED PHYSICS & ANIMATIONS */}
       <style>{`
         @keyframes subtleBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15%); } }
-        
-        /* 3D Forward Hop Easing */
         @keyframes hopAnim { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-28%) scale(1.18); } }
         .anim-hop { animation: hopAnim ${stepDuration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite; }
         
-        /* Smooth Reverse Kill Animation */
-        @keyframes gotiKillSpin { 
-          0% { transform: scale(1.1) rotate(0deg); filter: drop-shadow(0 0 15px #ef4444) brightness(1.8); } 
-          100% { transform: scale(0.8) rotate(-720deg); filter: drop-shadow(0 0 5px #ef4444) brightness(1.2); } 
-        }
+        @keyframes gotiKillSpin { 0% { transform: scale(1.1) rotate(0deg); filter: drop-shadow(0 0 15px #ef4444) brightness(1.8); } 100% { transform: scale(0.8) rotate(-720deg); filter: drop-shadow(0 0 5px #ef4444) brightness(1.2); } }
         .anim-kill { animation: gotiKillSpin 0.25s linear infinite !important; }
         
-        @keyframes winShockwave { 
-          0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.9); transform: scale(1); opacity: 1; } 
-          100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.6); opacity: 0; } 
-        }
+        @keyframes winShockwave { 0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.9); transform: scale(1); opacity: 1; } 100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.6); opacity: 0; } }
         .anim-shockwave { animation: winShockwave 0.6s ease-out; }
 
-        /* NAYA FIX: Clean Levitating Float Animation (No Color Washout) */
-        @keyframes gentleLevitate {
-          0%, 100% { transform: translateY(0) scale(1.08); }
-          50% { transform: translateY(-12%) scale(1.08); }
-        }
-        .ultra-playable-btn {
-          animation: gentleLevitate 1.2s ease-in-out infinite !important;
-          border: 2px solid white !important;
-          box-shadow: 0 6px 12px rgba(0,0,0,0.5) !important; /* Normal shadow, no glowing washout */
-        }
+        @keyframes gentleLevitate { 0%, 100% { transform: translateY(0) scale(1.08); } 50% { transform: translateY(-12%) scale(1.08); } }
+        .ultra-playable-btn { animation: gentleLevitate 1.2s ease-in-out infinite !important; border: 2px solid white !important; box-shadow: 0 6px 12px rgba(0,0,0,0.5) !important; }
         
-        /* Expanding Target Ring for playable token */
-        @keyframes targetPulse {
-          0% { transform: scale(1); opacity: 0.8; border-width: 3px; }
-          100% { transform: scale(1.8); opacity: 0; border-width: 1px; }
-        }
-        .target-ring-pulse {
-          animation: targetPulse 1.2s ease-out infinite;
-          border-style: solid;
-        }
+        @keyframes targetPulse { 0% { transform: scale(1); opacity: 0.8; border-width: 3px; } 100% { transform: scale(1.8); opacity: 0; border-width: 1px; } }
+        .target-ring-pulse { animation: targetPulse 1.2s ease-out infinite; border-style: solid; }
+
+        /* NEW FEATURE VISUALS: Hint Ring & Rage Vibe */
+        @keyframes hintPulseRing { 0% { transform: scale(1); opacity: 1; border-color: #00e6ff; } 100% { transform: scale(1.7); opacity: 0; border-width: 1.5px; } }
+        .hint-ring-anim { animation: hintPulseRing 1s ease-out infinite; }
+        
+        @keyframes rageHeartbeat { 0%, 100% { filter: drop-shadow(0 0 8px #ff3300) brightness(1.1); transform: scale(1); } 50% { filter: drop-shadow(0 0 25px #ff0000) brightness(1.4); transform: scale(1.1); } }
+        .rage-mode-active { animation: rageHeartbeat 0.6s ease-in-out infinite !important; border: 2px solid #ff4444 !important; }
       `}</style>
       
-      {/* LAYER 1: The Walking Grid */}
       {renderStaticGrid}
 
-      {/* Active Live Leaderboard Widget */}
-      {leaderboard && leaderboard.length > 0 && leaderboard.some((l: any) => l.finishedCount > 0) && (
-        <div className="absolute top-1 left-1/2 -translate-x-1/2 z-[60] bg-slate-900/60 backdrop-blur-md border border-white/20 px-3 py-1 rounded-full shadow-lg flex gap-3 pointer-events-none transition-opacity duration-300">
-          {leaderboard.filter((l: any) => l.finishedCount > 0).map((l: any, idx: number) => (
-            <div key={l.color} className="flex items-center gap-1">
-              <span className="text-[8px] font-black text-white">{idx + 1}</span>
-              <div className="w-2 h-2 rounded-full border border-white/50" style={{ backgroundColor: colors[l.color as Color] }} />
-              <span className="text-[10px] font-bold text-white">{l.finishedCount}/4</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* LAYER 2: PREMIUM COMPACT BASES */}
       <div className="absolute top-0 left-0 bg-[#E53935] z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] border-r border-b border-black/30" style={{ width: BASE_CONTAINER_PCT, height: BASE_CONTAINER_PCT }}>
         <div className="absolute top-[16.66%] left-[16.66%] w-[66.66%] h-[66.66%] bg-[#f8f9fa] rounded-xl sm:rounded-2xl shadow-inner border-[2px] border-black/10" />
       </div>
@@ -393,7 +340,6 @@ export default function LudoBoard() {
         <div className="absolute top-[16.66%] left-[16.66%] w-[66.66%] h-[66.66%] bg-[#f8f9fa] rounded-xl sm:rounded-2xl shadow-inner border-[2px] border-black/10" />
       </div>
 
-      {/* LAYER 3: Base Holes */}
       <div className="absolute inset-0 z-20 pointer-events-none">
         {Object.entries(BASE_COORDS).map(([color, coords]) =>
           coords.map(([r, c], i) => (
@@ -405,7 +351,6 @@ export default function LudoBoard() {
         )}
       </div>
 
-      {/* LAYER 4: CENTER WIN HOME */}
       <div className="absolute z-30 pointer-events-none drop-shadow-[0_0_20px_rgba(255,215,0,0.4)] flex items-center justify-center overflow-hidden border-[2px] sm:border-[3px] border-[#FFD700] shadow-[inset_0_0_20px_rgba(0,0,0,0.7)] bg-[#111]" 
            style={{ top: BASE_CONTAINER_PCT, left: BASE_CONTAINER_PCT, width: CENTER_CONTAINER_PCT, height: CENTER_CONTAINER_PCT }}>
         
@@ -437,7 +382,6 @@ export default function LudoBoard() {
         </div>
       </div>
 
-      {/* GHOST TRACE PREVIEW INTERACTIVE SYSTEM */}
       {ghostPos && (
         <div className="absolute z-30 pointer-events-none flex items-center justify-center opacity-50 transition-all duration-150 mix-blend-screen"
              style={{ width: `${getTrackSize(ghostPos.c)}%`, height: `${getTrackSize(ghostPos.r)}%`, top: `${getTrackPos(ghostPos.r)}%`, left: `${getTrackPos(ghostPos.c)}%` }}>
@@ -452,17 +396,17 @@ export default function LudoBoard() {
           const isAnimating = t.visPos !== trueStoreToken?.position;
           
           const isGettingKilled = trueStoreToken?.position === -1 && t.visPos > -1;
-          const justFinished = t.visPos === 57 && trueStoreToken?.position === 57 && isAnimating;
+          const justFinished = t.visPos === 56 && trueStoreToken?.position === 56 && isAnimating;
           
           const canMove = !isAnimating && !isGettingKilled && currentPlayerTurn === t.playerColor && diceValue !== null && 
-                         (t.position !== -1 || diceValue === 6) && (t.position + diceValue <= 57);
+                         (t.position !== -1 || diceValue === 6) && (t.position + diceValue <= 56);
 
-          const overlappingTokens = allTokens.filter(ot => ot.r === t.r && ot.c === t.c && ot.visPos !== -1 && ot.visPos < 57);
+          const overlappingTokens = allTokens.filter(ot => ot.r === t.r && ot.c === t.c && ot.visPos !== -1 && ot.visPos < 56);
           const overlapIndex = overlappingTokens.findIndex(ot => ot.id === t.id);
           const totalOverlap = overlappingTokens.length;
 
           let shiftX = 0, shiftY = 0, scale = 0.95;
-          if (totalOverlap > 1 && !t.isFinished && t.visPos < 57 && !isGettingKilled) {
+          if (totalOverlap > 1 && !t.isFinished && t.visPos < 56 && !isGettingKilled) { 
             scale = 0.55; 
             if (totalOverlap === 2) {
               shiftX = overlapIndex === 0 ? -15 : 15;
@@ -476,7 +420,7 @@ export default function LudoBoard() {
             }
           }
 
-          if (t.isFinished || t.visPos >= 57) {
+          if (t.isFinished || t.visPos >= 56) {
             scale = 0.55;
             if (t.playerColor === 'red') { shiftX = -28; shiftY = 0; }
             else if (t.playerColor === 'green') { shiftX = 0; shiftY = -28; }
@@ -484,8 +428,13 @@ export default function LudoBoard() {
             else if (t.playerColor === 'blue') { shiftX = 0; shiftY = 28; }
           }
 
-          const isJumpingNow = isAnimating && animationType === 'jump' && t.visPos > -1 && t.visPos < 57;
+          const isJumpingNow = isAnimating && animationType === 'jump' && t.visPos > -1 && t.visPos < 56;
           
+          // ADVANCED VISUAL FEATURE TRIGGERS
+          const isRecommended = canMove && recommendedTokenId === t.id;
+          const isSafe = safeTokens[t.id] && t.visPos !== -1 && t.visPos !== 56;
+          const isRage = ragePlayers[t.playerColor] && t.visPos > -1 && t.visPos < 56;
+
           return (
             <div 
               key={t.id}
@@ -501,20 +450,14 @@ export default function LudoBoard() {
             >
               {justFinished && <div className="absolute inset-0 rounded-full anim-shockwave pointer-events-none" />}
 
-              {/* Rotating Dashed Orbit Ring Around Playable Tokens */}
-              {canMove && (
-                <div 
-                  className="absolute inset-[-25%] rounded-full opacity-70 pointer-events-none z-0" 
-                  style={{ border: `1.5px dashed ${colors[t.playerColor as Color]}`, animation: 'spin 5s linear infinite' }} 
-                />
+              {/* FEATURE: Target Pulse Ring */}
+              {canMove && !isRecommended && (
+                <div className="absolute inset-0 rounded-full pointer-events-none z-0 target-ring-pulse" style={{ borderColor: colors[t.playerColor as Color] }} />
               )}
 
-              {/* NAYA FIX: Clean Target Pulse Ring instead of washout energy ripple */}
-              {canMove && (
-                <div 
-                  className="absolute inset-0 rounded-full pointer-events-none z-0 target-ring-pulse" 
-                  style={{ borderColor: colors[t.playerColor as Color] }} 
-                />
+              {/* FEATURE: Smart Hint Engine Cyan Ring */}
+              {isRecommended && (
+                <div className="absolute inset-[-30%] rounded-full z-0 hint-ring-anim border-2 border-dashed border-[#00e6ff] pointer-events-none" />
               )}
 
               <button
@@ -522,11 +465,22 @@ export default function LudoBoard() {
                 onMouseEnter={() => canMove && setHoveredToken(t.id)}
                 onMouseLeave={() => setHoveredToken(null)}
                 disabled={!canMove}
-                // NAYA FIX: Clean 'ultra-playable-btn' animation, no more washed out colors!
-                className={`relative rounded-full group transition-all ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer ultra-playable-btn' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
+                className={`relative rounded-full group transition-all ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer ultra-playable-btn' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''} ${isRage ? 'rage-mode-active' : ''}`}
                 style={{ width: `${TOKEN_SIZE}cqw`, height: `${TOKEN_SIZE}cqw` }}
               >
                 {t.isFinished && <CrownIcon />}
+                
+                {/* FEATURE: Safe Zone Transparent Shield */}
+                {isSafe && (
+                  <div className="absolute inset-0 bg-blue-400/30 rounded-full border border-blue-200/80 backdrop-blur-[1px] flex items-center justify-center z-20 shadow-[0_0_10px_rgba(96,165,250,0.8)]">
+                    <span className="text-[10px] drop-shadow-md">🛡️</span>
+                  </div>
+                )}
+
+                {/* FEATURE: Rage Mode Thunderbolt Badge */}
+                {isRage && !isSafe && (
+                  <div className="absolute -top-1 -right-1 z-30 drop-shadow-md text-[10px]">⚡</div>
+                )}
                 
                 <div className={`absolute bottom-[-10%] left-[5%] w-[90%] h-[90%] rounded-full ${tokenThemes[t.playerColor as Color].base} shadow-[0_4px_6px_rgba(0,0,0,0.6)]`} />
                 <div className="absolute inset-0 rounded-full border-[2px] border-white/90 shadow-inner bg-white flex items-center justify-center z-10">

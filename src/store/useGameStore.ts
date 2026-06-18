@@ -20,6 +20,13 @@ interface GameState {
   leaderboard: { color: Color; finishedCount: number }[];
   hoveredTokenId: string | null; 
   
+  // 5 ADVANCED FEATURES STATES
+  sixStreakCount: number; 
+  recommendedTokenId: string | null; 
+  gameStats: Record<Color, { totalKills: number; totalSixes: number; distanceTraveled: number }>; 
+  safeTokens: Record<string, boolean>; 
+  ragePlayers: Record<Color, boolean>; 
+
   setPreferences: (pref: { animationType?: 'jump' | 'smooth', isFastMode?: boolean, soundEnabled?: boolean }) => void;
   setHoveredToken: (tokenId: string | null) => void; 
   startGame: (playerCount: number, isRobot: boolean) => void;
@@ -30,7 +37,7 @@ interface GameState {
   updateLeaderboard: () => void;
 }
 
-// TURN SEQUENCE FIX: Strict Clockwise Order (YOU -> P1 -> P2 -> P3)
+// TURN SEQUENCE: Strict Clockwise Order (YOU -> P1 -> P2 -> P3)
 const getInitialPlayers = (): Player[] => ['yellow', 'blue', 'red', 'green'].map((color) => ({
   id: `player-${color}`,
   color: color as Color,
@@ -49,27 +56,36 @@ const getGlobalPosition = (color: Color, relativePos: number): string | number =
   return (START_OFFSETS[color] + relativePos) % 52;
 };
 
+const initialStats = {
+  yellow: { totalKills: 0, totalSixes: 0, distanceTraveled: 0 },
+  blue: { totalKills: 0, totalSixes: 0, distanceTraveled: 0 },
+  red: { totalKills: 0, totalSixes: 0, distanceTraveled: 0 },
+  green: { totalKills: 0, totalSixes: 0, distanceTraveled: 0 }
+};
+
 export const useGameStore = create<GameState>((set, get) => ({
   players: getInitialPlayers(),
-  currentPlayerTurn: 'yellow', // User (YOU) always gets the first turn now!
+  currentPlayerTurn: 'yellow', 
   diceValue: null,
   hasRolled: false,
   isAnimating: false,
   gameStarted: false,
   isRobotMode: false,
-  
-  // FIXED DEFAULT SEQUENCE: YOU (Yellow) -> P1 (Blue) -> P2 (Red) -> P3 (Green)
   activeColors: ['yellow', 'blue', 'red', 'green'],
-  
   animationType: 'jump',
   isFastMode: false,
   soundEnabled: true,
-  
   leaderboard: [],
   hoveredTokenId: null,
 
+  // INITIAL STATES
+  sixStreakCount: 0,
+  recommendedTokenId: null,
+  gameStats: initialStats,
+  safeTokens: {},
+  ragePlayers: { yellow: false, blue: false, red: false, green: false },
+
   setPreferences: (pref) => set((state) => ({ ...state, ...pref })),
-  
   setHoveredToken: (tokenId) => set({ hoveredTokenId: tokenId }),
 
   updateLeaderboard: () => {
@@ -85,8 +101,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startGame: (playerCount: number, isRobot: boolean) => {
     let active: Color[] = [];
-    
-    // Exact mapping for 2, 3, and 4 players based on the new fixed sequence
     if (playerCount === 2) active = ['yellow', 'red']; 
     else if (playerCount === 3) active = ['yellow', 'blue', 'red']; 
     else active = ['yellow', 'blue', 'red', 'green'];
@@ -96,11 +110,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       isRobotMode: isRobot,
       activeColors: active,
       players: getInitialPlayers(), 
-      currentPlayerTurn: active[0], // Ensures 'yellow' triggers first
+      currentPlayerTurn: active[0], 
       diceValue: null,
       hasRolled: false,
       isAnimating: false,
-      hoveredTokenId: null
+      hoveredTokenId: null,
+      sixStreakCount: 0,
+      recommendedTokenId: null,
+      gameStats: JSON.parse(JSON.stringify(initialStats)),
+      safeTokens: {},
+      ragePlayers: { yellow: false, blue: false, red: false, green: false }
     });
     get().updateLeaderboard();
   },
@@ -113,7 +132,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => {
       const currentIndex = state.activeColors.indexOf(state.currentPlayerTurn);
       const nextTurn = state.activeColors[(currentIndex + 1) % state.activeColors.length];
-      return { currentPlayerTurn: nextTurn, diceValue: null, hasRolled: false, isAnimating: false };
+      return { 
+        currentPlayerTurn: nextTurn, 
+        diceValue: null, 
+        hasRolled: false, 
+        isAnimating: false,
+        sixStreakCount: nextTurn === state.currentPlayerTurn ? state.sixStreakCount : 0,
+        recommendedTokenId: null
+      };
     });
   },
 
@@ -121,7 +147,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (state.hasRolled || state.isAnimating) return;
     
-    // 100% Fair Crypto Random Logic
     let randomNum = Math.floor(Math.random() * 6) + 1;
     if (typeof window !== 'undefined' && window.crypto) {
       const array = new Uint32Array(1);
@@ -129,27 +154,89 @@ export const useGameStore = create<GameState>((set, get) => ({
       randomNum = (array[0] % 6) + 1; 
     }
 
-    set({ diceValue: randomNum, hasRolled: true });
+    if (randomNum === 6) {
+      const turn = state.currentPlayerTurn;
+      set(prev => ({
+        gameStats: {
+          ...prev.gameStats,
+          [turn]: { ...prev.gameStats[turn], totalSixes: prev.gameStats[turn].totalSixes + 1 }
+        }
+      }));
+    }
+
+    let currentStreak = state.sixStreakCount;
+    if (randomNum === 6) {
+      currentStreak++;
+    } else {
+      currentStreak = 0;
+    }
+
+    if (currentStreak === 3) {
+      set({ diceValue: randomNum, hasRolled: true, sixStreakCount: 0, recommendedTokenId: null });
+      setTimeout(() => {
+        get().passTurn();
+      }, state.isFastMode ? 250 : 500);
+      return;
+    }
+
+    set({ diceValue: randomNum, hasRolled: true, sixStreakCount: currentStreak });
 
     const currentPlayer = state.players.find(p => p.color === state.currentPlayerTurn);
     if (currentPlayer) {
       const validTokens = currentPlayer.tokens.filter(t => {
         if (t.isFinished) return false;
         if (t.position === -1) return randomNum === 6; 
-        return (t.position + randomNum) <= 57; 
+        return (t.position + randomNum) <= 56; // Exact 56 win lock
       });
 
-      // 0ms Lag Pass Turn
       if (validTokens.length === 0) {
         setTimeout(() => {
           get().passTurn();
         }, state.isFastMode ? 200 : 400); 
       } 
-      // Auto-Move Smart Assist
-      else if (validTokens.length === 1 && (!state.isRobotMode || state.currentPlayerTurn === 'yellow')) {
-        setTimeout(() => {
-          get().moveToken(state.currentPlayerTurn, validTokens[0].id);
-        }, state.isFastMode ? 350 : 600);
+      else {
+        let bestTokenId = validTokens[0].id;
+        let maxWeight = -1;
+
+        validTokens.forEach(t => {
+          let weight = 0;
+          const nextRelPos = t.position === -1 ? 0 : t.position + randomNum;
+          const nextGlobPos = getGlobalPosition(state.currentPlayerTurn, nextRelPos);
+
+          if (typeof nextGlobPos === 'number' && !SAFE_POSITIONS_GLOBAL.includes(nextGlobPos)) {
+            state.players.forEach(p => {
+              if (p.color !== state.currentPlayerTurn) {
+                p.tokens.forEach(et => {
+                  if (et.position !== -1 && getGlobalPosition(p.color, et.position) === nextGlobPos) {
+                    weight += 100;
+                  }
+                });
+              }
+            });
+          }
+          if (nextRelPos === 56) weight += 50;
+          if (typeof nextGlobPos === 'number' && SAFE_POSITIONS_GLOBAL.includes(nextGlobPos)) weight += 30;
+          if (t.position === -1) weight += 20;
+
+          if (weight > maxWeight) {
+            maxWeight = weight;
+            bestTokenId = t.id;
+          }
+        });
+
+        set({ recommendedTokenId: bestTokenId });
+
+        // BULLETPROOF AI MOTOR: Robot Bina Ruke Khud Token Move Karega
+        if (state.isRobotMode && state.currentPlayerTurn !== 'yellow') {
+          setTimeout(() => {
+            const chosenTokenId = bestTokenId || validTokens[Math.floor(Math.random() * validTokens.length)].id;
+            get().moveToken(state.currentPlayerTurn, chosenTokenId);
+          }, state.isFastMode ? 400 : 700);
+        } else if (validTokens.length === 1) {
+          setTimeout(() => {
+            get().moveToken(state.currentPlayerTurn, validTokens[0].id);
+          }, state.isFastMode ? 350 : 600);
+        }
       }
     }
   },
@@ -161,7 +248,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     const diceVal = state.diceValue;
 
     set((prevState) => {
-      // Memory Optimization: Strict object slicing
       const newPlayers = JSON.parse(JSON.stringify(prevState.players)) as Player[];
       const playerIndex = newPlayers.findIndex(p => p.color === playerColor);
       const token = newPlayers[playerIndex].tokens.find(t => t.id === tokenId);
@@ -178,17 +264,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         stepsToMove = 1; 
         getsExtraTurn = true; 
       } else {
-        if (newRelativePos + diceVal > 57) return prevState;
+        if (newRelativePos + diceVal > 56) return prevState;
         newRelativePos += diceVal;
         stepsToMove = diceVal; 
         
-        if (newRelativePos === 57) {
+        if (newRelativePos === 56) { 
           token.isFinished = true;
           getsExtraTurn = true; 
         }
       }
 
       token.position = newRelativePos;
+
+      const updatedDistance = prevState.gameStats[playerColor].distanceTraveled + stepsToMove;
+      let currentKills = prevState.gameStats[playerColor].totalKills;
 
       const newGlobalPos = getGlobalPosition(playerColor, newRelativePos);
       let killedSomeone = false;
@@ -198,7 +287,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           if (p.color !== playerColor && prevState.activeColors.includes(p.color)) {
             p.tokens.forEach(enemyToken => {
               const enemyGlobal = getGlobalPosition(p.color, enemyToken.position);
-              if (enemyGlobal === newGlobalPos && enemyToken.position !== -1) {
+              if (enemyGlobal === enemyGlobal && enemyToken.position !== -1 && enemyGlobal === newGlobalPos) {
                 enemyToken.position = -1; 
                 getsExtraTurn = true;    
                 killedSomeone = true;
@@ -208,12 +297,31 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
       }
 
+      if (killedSomeone) currentKills++;
+
+      const nextSafeTokens = { ...prevState.safeTokens };
+      newPlayers.forEach(p => {
+        p.tokens.forEach(tk => {
+          const gPos = getGlobalPosition(p.color, tk.position);
+          if (typeof gPos === 'number' && SAFE_POSITIONS_GLOBAL.includes(gPos) && tk.position !== -1) {
+            nextSafeTokens[tk.id] = true;
+          } else {
+            nextSafeTokens[tk.id] = false;
+          }
+        });
+      });
+
+      const nextRagePlayers = { ...prevState.ragePlayers };
+      const outTokens = newPlayers[playerIndex].tokens.filter(tk => tk.position > -1 && !tk.isFinished);
+      nextRagePlayers[playerColor] = outTokens.length === 1;
+
       let nextTurn = prevState.currentPlayerTurn;
       if (diceVal === 6 || killedSomeone) getsExtraTurn = true; 
 
       if (!getsExtraTurn) {
         const currentIndex = prevState.activeColors.indexOf(nextTurn);
         nextTurn = prevState.activeColors[(currentIndex + 1) % prevState.activeColors.length];
+        set({ sixStreakCount: 0 });
       }
 
       const stepTime = prevState.isFastMode ? 80 : 150;
@@ -225,12 +333,26 @@ export const useGameStore = create<GameState>((set, get) => ({
           diceValue: null, 
           hasRolled: false,
           isAnimating: false,
-          hoveredTokenId: null
+          hoveredTokenId: null,
+          recommendedTokenId: null
         });
         get().updateLeaderboard();
       }, animationTime);
 
-      return { players: newPlayers, isAnimating: true };
+      return { 
+        players: newPlayers, 
+        isAnimating: true,
+        safeTokens: nextSafeTokens,
+        ragePlayers: nextRagePlayers,
+        gameStats: {
+          ...prevState.gameStats,
+          [playerColor]: {
+            ...prevState.gameStats[playerColor],
+            distanceTraveled: updatedDistance,
+            totalKills: currentKills
+          }
+        }
+      };
     });
   }
 }));
