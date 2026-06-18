@@ -145,8 +145,7 @@ export default function LudoBoard() {
   const isAnimatingStore = useGameStore((state: any) => state.isAnimating);
   const isFastMode = useGameStore((state: any) => state.isFastMode);
   const animationType = useGameStore((state: any) => state.animationType);
-  const leaderboard = useGameStore((state: any) => state.leaderboard);
-  
+
   const hoveredTokenId = useGameStore((state: any) => state.hoveredTokenId);
   const setHoveredToken = useGameStore((state: any) => state.setHoveredToken);
 
@@ -176,7 +175,6 @@ export default function LudoBoard() {
         const currentVisPos = visualPosRef.current[t.id];
 
         if (currentVisPos !== undefined && currentVisPos !== targetPos) {
-          
           if (targetPos === -1 && currentVisPos > -1) {
             let step = currentVisPos;
             const rewind = () => {
@@ -303,18 +301,16 @@ export default function LudoBoard() {
       
       if (targetP === -1 && diceValue === 6) targetP = 0;
       else if (targetP > -1 && targetP + diceValue <= 57) targetP += diceValue;
-      else targetP = -2; // invalid move
+      else targetP = -2; 
 
       if (targetP > -1) {
         let gr = 0, gc = 0;
         if (targetP >= 57) {
-          gr = 7; gc = 7; // Home
+          gr = 7; gc = 7; 
         } else if (targetP <= 50) {
-          // YAHAN FIX KIYA HAI: Explicit 'as Color' cast to resolve TypeScript 'any' index error
           const gPos = (START_OFFSETS[currentPlayerTurn as Color] + targetP) % 52;
           [gr, gc] = PATH_COORDS[gPos];
         } else {
-          // YAHAN FIX KIYA HAI: Explicit 'as Color' cast to resolve TypeScript 'any' index error
           [gr, gc] = HOME_PATHS[currentPlayerTurn as Color][targetP - 51];
         }
         ghostPos = { r: gr, c: gc, color: currentPlayerTurn as Color };
@@ -324,6 +320,7 @@ export default function LudoBoard() {
 
   return (
     <div className="relative w-full h-full aspect-square bg-slate-800 overflow-hidden shadow-inner @container">
+      {/* ADVANCED ADVANCED NEON INTERACTIVE ANIMATIONS */}
       <style>{`
         @keyframes subtleBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15%); } }
         @keyframes hopAnim { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-25%) scale(1.15); } }
@@ -341,20 +338,29 @@ export default function LudoBoard() {
           100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.5); opacity: 0; } 
         }
         .anim-shockwave { animation: winShockwave 0.6s ease-out; }
+
+        /* NAYA FEATURE: UNIQUE HIGH-CTR PLAYABLE SELECTION PHYSICS */
+        @keyframes neonBreath {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 8px #fff, 0 0 15px currentColor, 0 0 30px currentColor; filter: brightness(1.3); }
+          50% { transform: scale(1.06); box-shadow: 0 0 4px #fff, 0 0 8px currentColor, 0 0 15px currentColor; filter: brightness(1); }
+        }
+        @keyframes energyRipple {
+          0% { transform: scale(0.8); opacity: 0.9; }
+          100% { transform: scale(1.8); opacity: 0; }
+        }
+        .ultra-playable-btn {
+          animation: neonBreath 1s ease-in-out infinite !important;
+          border: 2.5px solid #ffffff !important;
+        }
+        .energy-ripple-wave {
+          animation: energyRipple 1s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+        }
       `}</style>
       
+      {/* LAYER 1: The Walking Grid */}
       {renderStaticGrid}
 
-      <div className="absolute top-1 left-1/2 -translate-x-1/2 z-[60] bg-slate-900/60 backdrop-blur-md border border-white/20 px-3 py-1 rounded-full shadow-lg flex gap-3 pointer-events-none transition-opacity duration-300">
-        {leaderboard && leaderboard.filter((l: any) => l.finishedCount > 0).map((l: any, idx: number) => (
-          <div key={l.color} className="flex items-center gap-1">
-            <span className="text-[8px] font-black text-white">{idx + 1}</span>
-            <div className="w-2 h-2 rounded-full border border-white/50" style={{ backgroundColor: colors[l.color as Color] }} />
-            <span className="text-[10px] font-bold text-white">{l.finishedCount}/4</span>
-          </div>
-        ))}
-      </div>
-
+      {/* LAYER 2: PREMIUM COMPACT BASES */}
       <div className="absolute top-0 left-0 bg-[#E53935] z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] border-r border-b border-black/30" style={{ width: BASE_CONTAINER_PCT, height: BASE_CONTAINER_PCT }}>
         <div className="absolute top-[16.66%] left-[16.66%] w-[66.66%] h-[66.66%] bg-[#f8f9fa] rounded-xl sm:rounded-2xl shadow-inner border-[2px] border-black/10" />
       </div>
@@ -368,6 +374,7 @@ export default function LudoBoard() {
         <div className="absolute top-[16.66%] left-[16.66%] w-[66.66%] h-[66.66%] bg-[#f8f9fa] rounded-xl sm:rounded-2xl shadow-inner border-[2px] border-black/10" />
       </div>
 
+      {/* LAYER 3: Base Holes */}
       <div className="absolute inset-0 z-20 pointer-events-none">
         {Object.entries(BASE_COORDS).map(([color, coords]) =>
           coords.map(([r, c], i) => (
@@ -379,6 +386,7 @@ export default function LudoBoard() {
         )}
       </div>
 
+      {/* LAYER 4: CENTER WIN HOME */}
       <div className="absolute z-30 pointer-events-none drop-shadow-[0_0_20px_rgba(255,215,0,0.4)] flex items-center justify-center overflow-hidden border-[2px] sm:border-[3px] border-[#FFD700] shadow-[inset_0_0_20px_rgba(0,0,0,0.7)] bg-[#111]" 
            style={{ top: BASE_CONTAINER_PCT, left: BASE_CONTAINER_PCT, width: CENTER_CONTAINER_PCT, height: CENTER_CONTAINER_PCT }}>
         
@@ -410,6 +418,7 @@ export default function LudoBoard() {
         </div>
       </div>
 
+      {/* GHOST TRACE PREVIEW INTERACTIVE SYSTEM */}
       {ghostPos && (
         <div className="absolute z-30 pointer-events-none flex items-center justify-center opacity-50 transition-all duration-150 mix-blend-screen"
              style={{ width: `${getTrackSize(ghostPos.c)}%`, height: `${getTrackSize(ghostPos.r)}%`, top: `${getTrackPos(ghostPos.r)}%`, left: `${getTrackPos(ghostPos.c)}%` }}>
@@ -473,13 +482,37 @@ export default function LudoBoard() {
             >
               {justFinished && <div className="absolute inset-0 rounded-full anim-shockwave pointer-events-none" />}
 
+              {/* NAYA FEATURE LAYER: Rotating Dashed Orbit Ring Around Playable Tokens */}
+              {canMove && (
+                <div 
+                  className="absolute inset-[-25%] rounded-full opacity-70 pointer-events-none z-0" 
+                  style={{ 
+                    border: `1.5px dashed ${colors[t.playerColor as Color]}`,
+                    animation: 'spin 5s linear infinite'
+                  }} 
+                />
+              )}
+
+              {/* NAYA FEATURE LAYER: Energy Ripple Wave Burst */}
+              {canMove && (
+                <div 
+                  className="absolute inset-0 rounded-full pointer-events-none z-0 energy-ripple-wave" 
+                  style={{ backgroundColor: colors[t.playerColor as Color] }} 
+                />
+              )}
+
               <button
                 onClick={() => moveToken(t.playerColor, t.id)}
                 onMouseEnter={() => canMove && setHoveredToken(t.id)}
                 onMouseLeave={() => setHoveredToken(null)}
                 disabled={!canMove}
-                className={`relative rounded-full group transition-transform ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer hover:scale-110 drop-shadow-[0_0_15px_rgba(255,255,255,1)] ring-4 ring-white animate-pulse' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
-                style={{ width: `${TOKEN_SIZE}cqw`, height: `${TOKEN_SIZE}cqw` }}
+                // FIXED & POWERED: 'ultra-playable-btn' adds stunning customized bloom neon glow
+                className={`relative rounded-full group transition-all ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer scale-105 ultra-playable-btn' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
+                style={{ 
+                  width: `${TOKEN_SIZE}cqw`, 
+                  height: `${TOKEN_SIZE}cqw`,
+                  color: colors[t.playerColor as Color] // strictly feeds currentColor to CSS shadow
+                }}
               >
                 {t.isFinished && <CrownIcon />}
                 
