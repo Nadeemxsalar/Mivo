@@ -12,17 +12,23 @@ interface GameState {
   gameStarted: boolean;
   isRobotMode: boolean; 
   
-  // Settings & Preferences States
+  // Settings & Performance States
   animationType: 'jump' | 'smooth';
   isFastMode: boolean;
-  soundEnabled: boolean; // FEATURE 3: Sound toggle support state
+  soundEnabled: boolean;
+  
+  // NAYE ADVANCED FEATURES STATES
+  leaderboard: { color: Color; finishedCount: number }[];
+  hoveredTokenId: string | null; // For Path Trace preview
   
   setPreferences: (pref: { animationType?: 'jump' | 'smooth', isFastMode?: boolean, soundEnabled?: boolean }) => void;
+  setHoveredToken: (tokenId: string | null) => void; // Path trace indicator state setter
   startGame: (playerCount: number, isRobot: boolean) => void;
   exitGame: () => void;
   rollDice: () => void;
   moveToken: (playerColor: Color, tokenId: string) => void;
   passTurn: () => void; 
+  updateLeaderboard: () => void;
 }
 
 const getInitialPlayers = (): Player[] => ['red', 'green', 'yellow', 'blue'].map((color) => ({
@@ -52,13 +58,28 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameStarted: false,
   isRobotMode: false,
   activeColors: ['red', 'green', 'blue', 'yellow'],
-  
-  // Default Settings Parameters
   animationType: 'jump',
   isFastMode: false,
   soundEnabled: true,
+  
+  // Initializing new features states cleanly
+  leaderboard: [],
+  hoveredTokenId: null,
 
   setPreferences: (pref) => set((state) => ({ ...state, ...pref })),
+  
+  setHoveredToken: (tokenId) => set({ hoveredTokenId: tokenId }),
+
+  updateLeaderboard: () => {
+    const { players, activeColors } = get();
+    const currentLeaderboard = activeColors.map(color => {
+      const p = players.find(player => player.color === color);
+      const finishedCount = p ? p.tokens.filter(t => t.isFinished).length : 0;
+      return { color, finishedCount };
+    }).sort((a, b) => b.finishedCount - a.finishedCount);
+    
+    set({ leaderboard: currentLeaderboard });
+  },
 
   startGame: (playerCount: number, isRobot: boolean) => {
     let active: Color[] = [];
@@ -74,8 +95,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentPlayerTurn: active[0], 
       diceValue: null,
       hasRolled: false,
-      isAnimating: false
+      isAnimating: false,
+      hoveredTokenId: null
     });
+    get().updateLeaderboard();
   },
 
   exitGame: () => {
@@ -94,7 +117,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (state.hasRolled || state.isAnimating) return;
     
-    // Casino-Grade Crypto Randomness (100% Fair Random)
     let randomNum = Math.floor(Math.random() * 6) + 1;
     if (typeof window !== 'undefined' && window.crypto) {
       const array = new Uint32Array(1);
@@ -106,24 +128,23 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const currentPlayer = state.players.find(p => p.color === state.currentPlayerTurn);
     if (currentPlayer) {
-      // Find all tokens that can legally move
       const validTokens = currentPlayer.tokens.filter(t => {
         if (t.isFinished) return false;
         if (t.position === -1) return randomNum === 6; 
         return (t.position + randomNum) <= 57; 
       });
 
+      // FEATURE 3: SMART SNAP NO-MOVE AUTO SKIP (0ms Lag Pass Turn)
       if (validTokens.length === 0) {
-        // No moves possible -> Auto Pass turn
         setTimeout(() => {
           get().passTurn();
-        }, state.isFastMode ? 600 : 1200); 
+        }, state.isFastMode ? 200 : 400); // Super optimized instant pass execution
       } 
-      // FEATURE 1: AUTO-MOVE SMART ASSIST (If only 1 token can move, play it automatically)
+      // AUTO-MOVE SMART ASSIST
       else if (validTokens.length === 1 && (!state.isRobotMode || state.currentPlayerTurn === 'yellow')) {
         setTimeout(() => {
           get().moveToken(state.currentPlayerTurn, validTokens[0].id);
-        }, state.isFastMode ? 400 : 800);
+        }, state.isFastMode ? 350 : 600);
       }
     }
   },
@@ -135,6 +156,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const diceVal = state.diceValue;
 
     set((prevState) => {
+      // Memory Optimization: Slice variables to strictly offload calculations
       const newPlayers = JSON.parse(JSON.stringify(prevState.players)) as Player[];
       const playerIndex = newPlayers.findIndex(p => p.color === playerColor);
       const token = newPlayers[playerIndex].tokens.find(t => t.id === tokenId);
@@ -152,7 +174,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         getsExtraTurn = true; 
       } else {
         if (newRelativePos + diceVal > 57) return prevState;
-
         newRelativePos += diceVal;
         stepsToMove = diceVal; 
         
@@ -172,7 +193,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           if (p.color !== playerColor && prevState.activeColors.includes(p.color)) {
             p.tokens.forEach(enemyToken => {
               const enemyGlobal = getGlobalPosition(p.color, enemyToken.position);
-              if (enemyGlobal === enemyGlobal && enemyGlobal === newGlobalPos && enemyToken.position !== -1) {
+              if (enemyGlobal === newGlobalPos && enemyToken.position !== -1) {
                 enemyToken.position = -1; 
                 getsExtraTurn = true;    
                 killedSomeone = true;
@@ -198,8 +219,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           currentPlayerTurn: nextTurn, 
           diceValue: null, 
           hasRolled: false,
-          isAnimating: false 
+          isAnimating: false,
+          hoveredTokenId: null
         });
+        // Garbage Collection and Leaderboard sync at the tail-end of action
+        get().updateLeaderboard();
       }, animationTime);
 
       return { players: newPlayers, isAnimating: true };

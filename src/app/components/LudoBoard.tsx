@@ -11,14 +11,12 @@ const StarIcon = ({ color }: { color: string }) => (
   </svg>
 );
 
-// Starting Arrow SVG
 const ArrowIcon = ({ rotation }: { rotation: string }) => (
   <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)" className="absolute w-[60%] h-[60%] drop-shadow-[0_0_5px_rgba(255,255,255,0.8)] z-0" style={{ transform: `rotate(${rotation})` }}>
     <path d="M12 4l-8 8h6v8h4v-8h6z" />
   </svg>
 );
 
-// Winner Crown Icon
 const CrownIcon = () => (
   <svg viewBox="0 0 24 24" fill="#FFD700" className="absolute -top-3 sm:-top-4 w-5 h-5 sm:w-6 sm:h-6 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] z-50">
     <path d="M2 22h20v2H2v-2zm2-2l3-10 5 4 5-4 3 10H4z" />
@@ -28,7 +26,6 @@ const CrownIcon = () => (
   </svg>
 );
 
-// Animated Royal Taj (Crown SVG)
 const CenterTajIcon = () => (
   <svg viewBox="0 0 100 100" fill="none" className="w-[70%] h-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] animate-[subtleBounce_2.5s_ease-in-out_infinite]">
     <defs>
@@ -91,7 +88,6 @@ const BASE_COORDS: Record<Color, number[][]> = {
   blue: [[11,2],[11,3],[12,2],[12,3]]   
 };
 
-// GRID ENGINE
 const PATH_RATIO = 1.15; 
 const TRACK_RATIOS = [1, 1, 1, 1, 1, 1, PATH_RATIO, PATH_RATIO, PATH_RATIO, 1, 1, 1, 1, 1, 1];
 const TOTAL_RATIO = 12 + (3 * PATH_RATIO); 
@@ -130,7 +126,6 @@ const isStarSpot = (r: number, c: number) => {
   return [[6, 1], [1, 8], [8, 13], [13, 6], [8, 2], [6, 12], [2, 6], [12, 8]].some(([sr, sc]) => sr === r && sc === c);
 };
 
-// Check if cell is the starting block
 const getStartDirection = (r: number, c: number) => {
   if (r === 6 && c === 1) return '90deg'; 
   if (r === 1 && c === 8) return '180deg'; 
@@ -149,12 +144,15 @@ export default function LudoBoard() {
   const isRobotMode = useGameStore((state: any) => state.isRobotMode);
   const isAnimatingStore = useGameStore((state: any) => state.isAnimating);
   const isFastMode = useGameStore((state: any) => state.isFastMode);
-  const animationType = useGameStore((state: any) => state.animationType); // 'jump' or 'smooth'
+  const animationType = useGameStore((state: any) => state.animationType);
+  const leaderboard = useGameStore((state: any) => state.leaderboard);
+  
+  const hoveredTokenId = useGameStore((state: any) => state.hoveredTokenId);
+  const setHoveredToken = useGameStore((state: any) => state.setHoveredToken);
 
   const visualPosRef = useRef<Record<string, number>>({});
   const [renderTick, setRenderTick] = useState(0);
 
-  // Speed Logic based on user settings
   const stepDuration = isFastMode ? 80 : 150; 
 
   useEffect(() => {
@@ -179,20 +177,18 @@ export default function LudoBoard() {
 
         if (currentVisPos !== undefined && currentVisPos !== targetPos) {
           
-          // Goti Kill Rewind Animation
           if (targetPos === -1 && currentVisPos > -1) {
             let step = currentVisPos;
             const rewind = () => {
-              step = Math.max(-1, step - 3); // Fast backwards slide
+              step = Math.max(-1, step - 3); 
               visualPosRef.current[t.id] = step;
               setRenderTick(v => v + 1);
               if (step > -1) {
-                setTimeout(rewind, 20); // Speedy rewind
+                setTimeout(rewind, 20); 
               }
             };
             setTimeout(rewind, 20);
           } 
-          // Normal Animation
           else if (targetPos > currentVisPos) {
             let step = currentVisPos;
             const hop = () => {
@@ -227,7 +223,6 @@ export default function LudoBoard() {
             return (t.position + diceValue) <= 57;
           });
 
-          // Robot selects randomly if more than 1 options are available
           if (validTokens.length > 1) {
             const chosenToken = validTokens[Math.floor(Math.random() * validTokens.length)];
             moveToken(currentPlayerTurn, chosenToken.id);
@@ -295,46 +290,71 @@ export default function LudoBoard() {
     );
   }, []);
 
+  // =====================================
+  // GHOST TRACE CALCULATION (Where will the token land?)
+  // =====================================
+  let ghostPos = null;
+  if (hoveredTokenId && !isAnimatingStore && diceValue !== null && hasRolled) {
+    const activePlayer = players.find((p: Player) => p.color === currentPlayerTurn);
+    const hoveredT = activePlayer?.tokens.find((t: Token) => t.id === hoveredTokenId);
+    
+    if (hoveredT && !hoveredT.isFinished) {
+      let targetP = hoveredT.position;
+      
+      if (targetP === -1 && diceValue === 6) targetP = 0;
+      else if (targetP > -1 && targetP + diceValue <= 57) targetP += diceValue;
+      else targetP = -2; // invalid move
+
+      if (targetP > -1) {
+        let gr = 0, gc = 0;
+        if (targetP >= 57) {
+          gr = 7; gc = 7; // Home
+        } else if (targetP <= 50) {
+          // YAHAN FIX KIYA HAI: Explicit 'as Color' cast to resolve TypeScript 'any' index error
+          const gPos = (START_OFFSETS[currentPlayerTurn as Color] + targetP) % 52;
+          [gr, gc] = PATH_COORDS[gPos];
+        } else {
+          // YAHAN FIX KIYA HAI: Explicit 'as Color' cast to resolve TypeScript 'any' index error
+          [gr, gc] = HOME_PATHS[currentPlayerTurn as Color][targetP - 51];
+        }
+        ghostPos = { r: gr, c: gc, color: currentPlayerTurn as Color };
+      }
+    }
+  }
+
   return (
     <div className="relative w-full h-full aspect-square bg-slate-800 overflow-hidden shadow-inner @container">
       <style>{`
-        @keyframes subtleBounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-15%); }
-        }
+        @keyframes subtleBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15%); } }
+        @keyframes hopAnim { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-25%) scale(1.15); } }
+        .anim-hop { animation: hopAnim ${stepDuration}ms ease-in-out; }
         
-        /* NEW PHYSICS: Real Hop Animation for 'Jump' mode */
-        @keyframes hopAnim {
-          0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-25%) scale(1.15); }
+        @keyframes gotiKillSpin { 
+          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: drop-shadow(0 0 20px red) brightness(2); } 
+          50% { transform: scale(0.6) rotate(180deg); opacity: 0.8; filter: drop-shadow(0 0 30px red) brightness(1.5); } 
+          100% { transform: scale(0.4) rotate(360deg); opacity: 0; filter: drop-shadow(0 0 0px red) brightness(1); } 
         }
-        .anim-hop {
-          animation: hopAnim ${stepDuration}ms ease-in-out;
+        .anim-kill { animation: gotiKillSpin 0.3s linear; }
+        
+        @keyframes winShockwave { 
+          0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8); transform: scale(1); opacity: 1; } 
+          100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.5); opacity: 0; } 
         }
-
-        /* NEW FEATURE: Flash & Shockwave effects */
-        @keyframes gotiKillSpin {
-          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: drop-shadow(0 0 20px red) brightness(2); }
-          50% { transform: scale(0.6) rotate(180deg); opacity: 0.8; filter: drop-shadow(0 0 30px red) brightness(1.5); }
-          100% { transform: scale(0.4) rotate(360deg); opacity: 0; filter: drop-shadow(0 0 0px red) brightness(1); }
-        }
-        .anim-kill {
-          animation: gotiKillSpin 0.3s linear;
-        }
-
-        @keyframes winShockwave {
-          0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8); transform: scale(1); opacity: 1; }
-          100% { box-shadow: 0 0 0 40px rgba(255, 215, 0, 0); transform: scale(1.5); opacity: 0; }
-        }
-        .anim-shockwave {
-          animation: winShockwave 0.6s ease-out;
-        }
+        .anim-shockwave { animation: winShockwave 0.6s ease-out; }
       `}</style>
       
-      {/* LAYER 1: The Walking Grid */}
       {renderStaticGrid}
 
-      {/* LAYER 2: PREMIUM COMPACT BASES */}
+      <div className="absolute top-1 left-1/2 -translate-x-1/2 z-[60] bg-slate-900/60 backdrop-blur-md border border-white/20 px-3 py-1 rounded-full shadow-lg flex gap-3 pointer-events-none transition-opacity duration-300">
+        {leaderboard && leaderboard.filter((l: any) => l.finishedCount > 0).map((l: any, idx: number) => (
+          <div key={l.color} className="flex items-center gap-1">
+            <span className="text-[8px] font-black text-white">{idx + 1}</span>
+            <div className="w-2 h-2 rounded-full border border-white/50" style={{ backgroundColor: colors[l.color as Color] }} />
+            <span className="text-[10px] font-bold text-white">{l.finishedCount}/4</span>
+          </div>
+        ))}
+      </div>
+
       <div className="absolute top-0 left-0 bg-[#E53935] z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] border-r border-b border-black/30" style={{ width: BASE_CONTAINER_PCT, height: BASE_CONTAINER_PCT }}>
         <div className="absolute top-[16.66%] left-[16.66%] w-[66.66%] h-[66.66%] bg-[#f8f9fa] rounded-xl sm:rounded-2xl shadow-inner border-[2px] border-black/10" />
       </div>
@@ -348,7 +368,6 @@ export default function LudoBoard() {
         <div className="absolute top-[16.66%] left-[16.66%] w-[66.66%] h-[66.66%] bg-[#f8f9fa] rounded-xl sm:rounded-2xl shadow-inner border-[2px] border-black/10" />
       </div>
 
-      {/* LAYER 3: Base Holes */}
       <div className="absolute inset-0 z-20 pointer-events-none">
         {Object.entries(BASE_COORDS).map(([color, coords]) =>
           coords.map(([r, c], i) => (
@@ -360,7 +379,6 @@ export default function LudoBoard() {
         )}
       </div>
 
-      {/* LAYER 4: CENTER WIN HOME */}
       <div className="absolute z-30 pointer-events-none drop-shadow-[0_0_20px_rgba(255,215,0,0.4)] flex items-center justify-center overflow-hidden border-[2px] sm:border-[3px] border-[#FFD700] shadow-[inset_0_0_20px_rgba(0,0,0,0.7)] bg-[#111]" 
            style={{ top: BASE_CONTAINER_PCT, left: BASE_CONTAINER_PCT, width: CENTER_CONTAINER_PCT, height: CENTER_CONTAINER_PCT }}>
         
@@ -392,13 +410,19 @@ export default function LudoBoard() {
         </div>
       </div>
 
+      {ghostPos && (
+        <div className="absolute z-30 pointer-events-none flex items-center justify-center opacity-50 transition-all duration-150 mix-blend-screen"
+             style={{ width: `${getTrackSize(ghostPos.c)}%`, height: `${getTrackSize(ghostPos.r)}%`, top: `${getTrackPos(ghostPos.r)}%`, left: `${getTrackPos(ghostPos.c)}%` }}>
+           <div className={`w-[85%] h-[85%] rounded-full border-[3px] border-white shadow-[0_0_15px_rgba(255,255,255,1)] animate-pulse`} />
+        </div>
+      )}
+
       {/* LAYER 5: Animated Tokens */}
       <div className="absolute inset-0 z-40 pointer-events-none">
         {allTokens.map((t) => {
           const trueStoreToken = players.find((p: Player) => p.color === t.playerColor)?.tokens[t.index];
           const isAnimating = t.visPos !== trueStoreToken?.position;
           
-          // States for Visual Effects
           const isGettingKilled = trueStoreToken?.position === -1 && t.visPos > -1;
           const justFinished = t.visPos === 57 && trueStoreToken?.position === 57 && isAnimating;
           
@@ -432,7 +456,6 @@ export default function LudoBoard() {
             else if (t.playerColor === 'blue') { shiftX = 0; shiftY = 28; }
           }
 
-          // DYNAMIC TRANSITION BASED ON SETTINGS (Smooth or Jump)
           const isJumpingNow = isAnimating && animationType === 'jump' && t.visPos > -1 && t.visPos < 57;
           
           return (
@@ -448,14 +471,13 @@ export default function LudoBoard() {
                 transition: isGettingKilled ? 'none' : `top ${stepDuration}ms linear, left ${stepDuration}ms linear, transform ${stepDuration}ms ease-out`
               }}
             >
-              {/* NEW SHOCKWAVE EFFECT WHEN TOKEN WINS */}
               {justFinished && <div className="absolute inset-0 rounded-full anim-shockwave pointer-events-none" />}
 
               <button
                 onClick={() => moveToken(t.playerColor, t.id)}
+                onMouseEnter={() => canMove && setHoveredToken(t.id)}
+                onMouseLeave={() => setHoveredToken(null)}
                 disabled={!canMove}
-                // FIXED PHYSICS ENGINE: 'anim-hop' for Jump, nothing for smooth
-                // GLOWING VALID TOKENS: ring-4 ring-white for valid moves
                 className={`relative rounded-full group transition-transform ${isJumpingNow ? 'anim-hop' : ''} ${canMove ? 'cursor-pointer hover:scale-110 drop-shadow-[0_0_15px_rgba(255,255,255,1)] ring-4 ring-white animate-pulse' : 'cursor-not-allowed'} ${isGettingKilled ? 'anim-kill' : ''}`}
                 style={{ width: `${TOKEN_SIZE}cqw`, height: `${TOKEN_SIZE}cqw` }}
               >
