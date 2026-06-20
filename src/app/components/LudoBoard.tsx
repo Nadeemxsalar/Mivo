@@ -145,15 +145,19 @@ export default function LudoBoard() {
   const isAnimatingStore = useGameStore((state: any) => state.isAnimating);
   const isFastMode = useGameStore((state: any) => state.isFastMode);
   const animationType = useGameStore((state: any) => state.animationType);
-  const leaderboard = useGameStore((state: any) => state.leaderboard);
   
   const hoveredTokenId = useGameStore((state: any) => state.hoveredTokenId);
   const setHoveredToken = useGameStore((state: any) => state.setHoveredToken);
 
-  // NEW ADVANCED STORE STATES CONNECTED
   const recommendedTokenId = useGameStore((state: any) => state.recommendedTokenId);
   const safeTokens = useGameStore((state: any) => state.safeTokens);
   const ragePlayers = useGameStore((state: any) => state.ragePlayers);
+
+  // WINNER & GAME FINISHED STATES
+  const gameFinished = useGameStore((state: any) => state.gameFinished);
+  const winners = useGameStore((state: any) => state.winners);
+  const exitGame = useGameStore((state: any) => state.exitGame);
+  const activeColors = useGameStore((state: any) => state.activeColors);
 
   const visualPosRef = useRef<Record<string, number>>({});
   const [renderTick, setRenderTick] = useState(0);
@@ -172,7 +176,7 @@ export default function LudoBoard() {
   }, []); 
 
   // =====================================
-  // ADVANCED STEP-BY-STEP & SILKY SMOOTH REWIND KILL ENGINE
+  // SILKY SMOOTH REWIND KILL ENGINE
   // =====================================
   useEffect(() => {
     players.forEach((p: Player) => {
@@ -221,7 +225,7 @@ export default function LudoBoard() {
         const playerColor = p.color as Color;
         const visPos = visualPosRef.current[t.id] ?? t.position;
         
-        if (t.isFinished || visPos >= 56) { // EXACT WIN CONFIGURATION
+        if (t.isFinished || visPos >= 56) { 
           r = 7; c = 7; 
         } else if (visPos === -1) {
           [r, c] = BASE_COORDS[playerColor][index]; 
@@ -270,7 +274,6 @@ export default function LudoBoard() {
     );
   }, []);
 
-  // Ghost Trace Calculation
   let ghostPos = null;
   if (hoveredTokenId && !isAnimatingStore && diceValue !== null && hasRolled) {
     const activePlayer = players.find((p: Player) => p.color === currentPlayerTurn);
@@ -317,12 +320,17 @@ export default function LudoBoard() {
         @keyframes targetPulse { 0% { transform: scale(1); opacity: 0.8; border-width: 3px; } 100% { transform: scale(1.8); opacity: 0; border-width: 1px; } }
         .target-ring-pulse { animation: targetPulse 1.2s ease-out infinite; border-style: solid; }
 
-        /* NEW FEATURE VISUALS: Hint Ring & Rage Vibe */
         @keyframes hintPulseRing { 0% { transform: scale(1); opacity: 1; border-color: #00e6ff; } 100% { transform: scale(1.7); opacity: 0; border-width: 1.5px; } }
         .hint-ring-anim { animation: hintPulseRing 1s ease-out infinite; }
         
         @keyframes rageHeartbeat { 0%, 100% { filter: drop-shadow(0 0 8px #ff3300) brightness(1.1); transform: scale(1); } 50% { filter: drop-shadow(0 0 25px #ff0000) brightness(1.4); transform: scale(1.1); } }
         .rage-mode-active { animation: rageHeartbeat 0.6s ease-in-out infinite !important; border: 2px solid #ff4444 !important; }
+
+        /* CELEBRATION MODAL POPUP */
+        @keyframes modalPop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .winner-modal-anim { animation: modalPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes shineSweep { 0% { transform: translateX(-100%) rotate(45deg); } 100% { transform: translateX(200%) rotate(45deg); } }
+        .shine-effect::after { content: ''; position: absolute; top: 0; left: 0; width: 50%; height: 100%; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%); transform: skewX(-20deg) translateX(-150%); animation: shineSweep 3s infinite; }
       `}</style>
       
       {renderStaticGrid}
@@ -398,7 +406,7 @@ export default function LudoBoard() {
           const isGettingKilled = trueStoreToken?.position === -1 && t.visPos > -1;
           const justFinished = t.visPos === 56 && trueStoreToken?.position === 56 && isAnimating;
           
-          const canMove = !isAnimating && !isGettingKilled && currentPlayerTurn === t.playerColor && diceValue !== null && 
+          const canMove = !isAnimating && !isGettingKilled && currentPlayerTurn === t.playerColor && diceValue !== null && !gameFinished &&
                          (t.position !== -1 || diceValue === 6) && (t.position + diceValue <= 56);
 
           const overlappingTokens = allTokens.filter(ot => ot.r === t.r && ot.c === t.c && ot.visPos !== -1 && ot.visPos < 56);
@@ -406,17 +414,23 @@ export default function LudoBoard() {
           const totalOverlap = overlappingTokens.length;
 
           let shiftX = 0, shiftY = 0, scale = 0.95;
+          
+          // FEATURE 2: PERFECT OVERLAP SYSTEM (No hidden colors on Stars)
           if (totalOverlap > 1 && !t.isFinished && t.visPos < 56 && !isGettingKilled) { 
-            scale = 0.55; 
+            scale = totalOverlap > 4 ? 0.45 : 0.55; 
             if (totalOverlap === 2) {
-              shiftX = overlapIndex === 0 ? -15 : 15;
-              shiftY = overlapIndex === 0 ? -15 : 15;
+              shiftX = overlapIndex === 0 ? -25 : 25;
+              shiftY = overlapIndex === 0 ? -25 : 25;
             } else if (totalOverlap === 3) {
-              shiftX = overlapIndex === 0 ? 0 : (overlapIndex === 1 ? -18 : 18);
-              shiftY = overlapIndex === 0 ? -18 : 15;
+              shiftX = overlapIndex === 0 ? 0 : (overlapIndex === 1 ? -25 : 25);
+              shiftY = overlapIndex === 0 ? -25 : 20;
+            } else if (totalOverlap === 4) {
+              shiftX = overlapIndex % 2 === 0 ? -25 : 25;
+              shiftY = overlapIndex < 2 ? -25 : 25;
             } else {
-              shiftX = overlapIndex % 2 === 0 ? -18 : 18;
-              shiftY = overlapIndex < 2 ? -18 : 18;
+              const angle = (overlapIndex / totalOverlap) * Math.PI * 2;
+              shiftX = Math.cos(angle) * 28;
+              shiftY = Math.sin(angle) * 28;
             }
           }
 
@@ -430,7 +444,6 @@ export default function LudoBoard() {
 
           const isJumpingNow = isAnimating && animationType === 'jump' && t.visPos > -1 && t.visPos < 56;
           
-          // ADVANCED VISUAL FEATURE TRIGGERS
           const isRecommended = canMove && recommendedTokenId === t.id;
           const isSafe = safeTokens[t.id] && t.visPos !== -1 && t.visPos !== 56;
           const isRage = ragePlayers[t.playerColor] && t.visPos > -1 && t.visPos < 56;
@@ -450,12 +463,10 @@ export default function LudoBoard() {
             >
               {justFinished && <div className="absolute inset-0 rounded-full anim-shockwave pointer-events-none" />}
 
-              {/* FEATURE: Target Pulse Ring */}
               {canMove && !isRecommended && (
                 <div className="absolute inset-0 rounded-full pointer-events-none z-0 target-ring-pulse" style={{ borderColor: colors[t.playerColor as Color] }} />
               )}
 
-              {/* FEATURE: Smart Hint Engine Cyan Ring */}
               {isRecommended && (
                 <div className="absolute inset-[-30%] rounded-full z-0 hint-ring-anim border-2 border-dashed border-[#00e6ff] pointer-events-none" />
               )}
@@ -470,19 +481,20 @@ export default function LudoBoard() {
               >
                 {t.isFinished && <CrownIcon />}
                 
-                {/* FEATURE: Safe Zone Transparent Shield */}
-                {isSafe && (
-                  <div className="absolute inset-0 bg-blue-400/30 rounded-full border border-blue-200/80 backdrop-blur-[1px] flex items-center justify-center z-20 shadow-[0_0_10px_rgba(96,165,250,0.8)]">
-                    <span className="text-[10px] drop-shadow-md">🛡️</span>
-                  </div>
+                {/* FEATURE 1: SHIELD VISIBILITY FIX (Glowing Aura + Badge, NO BLUR!) */}
+                {isSafe && !t.isFinished && (
+                  <>
+                    <div className="absolute inset-[-15%] rounded-full border-[2.5px] border-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.9)] z-0 pointer-events-none animate-pulse" />
+                    <div className="absolute -top-2 -right-2 z-30 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] text-[12px] bg-blue-500 rounded-full w-4 h-4 flex items-center justify-center border border-white">🛡️</div>
+                  </>
                 )}
 
-                {/* FEATURE: Rage Mode Thunderbolt Badge */}
-                {isRage && !isSafe && (
-                  <div className="absolute -top-1 -right-1 z-30 drop-shadow-md text-[10px]">⚡</div>
+                {isRage && !isSafe && !t.isFinished && (
+                  <div className="absolute -top-2 -right-2 z-30 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] text-[12px] bg-red-500 rounded-full w-4 h-4 flex items-center justify-center border border-white">⚡</div>
                 )}
                 
-                <div className={`absolute bottom-[-10%] left-[5%] w-[90%] h-[90%] rounded-full ${tokenThemes[t.playerColor as Color].base} shadow-[0_4px_6px_rgba(0,0,0,0.6)]`} />
+                {/* SOLID BORDER ADDED WHEN MULTIPLE TOKENS OVERLAP FOR CLARITY */}
+                <div className={`absolute bottom-[-10%] left-[5%] w-[90%] h-[90%] rounded-full ${tokenThemes[t.playerColor as Color].base} shadow-[0_4px_6px_rgba(0,0,0,0.6)] ${totalOverlap > 1 ? 'border border-black' : ''}`} />
                 <div className="absolute inset-0 rounded-full border-[2px] border-white/90 shadow-inner bg-white flex items-center justify-center z-10">
                   <div className={`w-[80%] h-[80%] rounded-full ${tokenThemes[t.playerColor as Color].top} shadow-[inset_0_-2px_4px_rgba(0,0,0,0.5)] flex items-start justify-center pt-[10%]`}>
                     <div className="w-[50%] h-[25%] bg-white/70 rounded-full blur-[0.5px]" />
@@ -493,6 +505,45 @@ export default function LudoBoard() {
           );
         })}
       </div>
+
+      {/* FEATURE 3: GRAND WINNER CELEBRATION MODAL */}
+      {gameFinished && winners.length > 0 && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 pointer-events-auto">
+          <div className="winner-modal-anim relative w-full max-w-md bg-slate-900 border-2 border-yellow-500 p-8 rounded-[3rem] shadow-[0_0_50px_rgba(234,179,8,0.4)] flex flex-col items-center gap-6 overflow-hidden">
+            {/* Background Shine */}
+            <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 shine-effect pointer-events-none" />
+
+            <h2 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 drop-shadow-lg tracking-widest uppercase z-10">GAME OVER</h2>
+            
+            <div className="w-full flex flex-col gap-4 z-10">
+              {winners.map((color: Color, idx: number) => {
+                const medals = ['🥇 1ST', '🥈 2ND', '🥉 3RD'];
+                const rankColors = { red: 'text-red-400', blue: 'text-blue-400', green: 'text-green-400', yellow: 'text-yellow-400' };
+                return (
+                  <div key={color} className="w-full bg-slate-800/80 border border-slate-700 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-6 h-6 rounded-full border-2 border-white shadow-md ${tokenThemes[color].base}`} />
+                      <span className={`text-lg font-black uppercase tracking-wider ${rankColors[color]}`}>
+                        {color === 'yellow' ? 'YOU' : `PLAYER ${color.toUpperCase()}`}
+                      </span>
+                    </div>
+                    <span className="text-xl font-black tracking-widest text-slate-200">{medals[idx]}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button 
+              onClick={exitGame}
+              className="mt-4 w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-2xl font-black text-white text-lg tracking-[0.2em] shadow-[0_10px_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 border border-white/20 z-10"
+            >
+              BACK TO HOME 🏠
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

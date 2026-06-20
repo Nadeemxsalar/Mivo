@@ -27,6 +27,10 @@ interface GameState {
   safeTokens: Record<string, boolean>; 
   ragePlayers: Record<Color, boolean>; 
 
+  // NEW MULTI-WINNER STATES
+  winners: Color[];
+  gameFinished: boolean;
+
   setPreferences: (pref: { animationType?: 'jump' | 'smooth', isFastMode?: boolean, soundEnabled?: boolean }) => void;
   setHoveredToken: (tokenId: string | null) => void; 
   startGame: (playerCount: number, isRobot: boolean) => void;
@@ -37,18 +41,17 @@ interface GameState {
   updateLeaderboard: () => void;
 }
 
-// TURN SEQUENCE: Strict Clockwise Order (YOU -> P1 -> P2 -> P3)
-const getInitialPlayers = (): Player[] => ['yellow', 'blue', 'red', 'green'].map((color) => ({
-  id: `player-${color}`,
-  color: color as Color,
-  isActive: true,
-  tokens: [0, 1, 2, 3].map((num) => ({
-    id: `${color}-t${num}`,
-    color: color as Color,
-    position: -1, 
-    isFinished: false,
-  })),
-}));
+// Helper to calculate next turn strictly clockwise while skipping finished players
+const getNextTurnColor = (currentTurn: Color, activeColors: Color[], players: Player[]): Color => {
+  let idx = activeColors.indexOf(currentTurn);
+  for (let i = 1; i <= activeColors.length; i++) {
+    const nextColor = activeColors[(idx + i) % activeColors.length];
+    const p = players.find(player => player.color === nextColor);
+    const isDone = p ? p.tokens.filter(t => t.isFinished).length === 4 : false;
+    if (!isDone) return nextColor;
+  }
+  return currentTurn;
+};
 
 const getGlobalPosition = (color: Color, relativePos: number): string | number => {
   if (relativePos === -1) return `base-${color}`;
@@ -64,7 +67,7 @@ const initialStats = {
 };
 
 export const useGameStore = create<GameState>((set, get) => ({
-  players: getInitialPlayers(),
+  players: [],
   currentPlayerTurn: 'yellow', 
   diceValue: null,
   hasRolled: false,
@@ -78,18 +81,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   leaderboard: [],
   hoveredTokenId: null,
 
-  // INITIAL STATES
   sixStreakCount: 0,
   recommendedTokenId: null,
   gameStats: initialStats,
   safeTokens: {},
   ragePlayers: { yellow: false, blue: false, red: false, green: false },
+  
+  // INITIAL MULTI-WINNER VALUES
+  winners: [],
+  gameFinished: false,
 
   setPreferences: (pref) => set((state) => ({ ...state, ...pref })),
   setHoveredToken: (tokenId) => set({ hoveredTokenId: tokenId }),
 
   updateLeaderboard: () => {
     const { players, activeColors } = get();
+    if (!players || players.length === 0) return;
     const currentLeaderboard = activeColors.map(color => {
       const p = players.find(player => player.color === color);
       const finishedCount = p ? p.tokens.filter(t => t.isFinished).length : 0;
@@ -105,11 +112,23 @@ export const useGameStore = create<GameState>((set, get) => ({
     else if (playerCount === 3) active = ['yellow', 'blue', 'red']; 
     else active = ['yellow', 'blue', 'red', 'green'];
 
+    const freshPlayers = ['yellow', 'blue', 'red', 'green'].map((color) => ({
+      id: `player-${color}`,
+      color: color as Color,
+      isActive: true,
+      tokens: [0, 1, 2, 3].map((num) => ({
+        id: `${color}-t${num}`,
+        color: color as Color,
+        position: -1, 
+        isFinished: false,
+      })),
+    }));
+
     set({
       gameStarted: true,
       isRobotMode: isRobot,
       activeColors: active,
-      players: getInitialPlayers(), 
+      players: freshPlayers, 
       currentPlayerTurn: active[0], 
       diceValue: null,
       hasRolled: false,
@@ -119,19 +138,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       recommendedTokenId: null,
       gameStats: JSON.parse(JSON.stringify(initialStats)),
       safeTokens: {},
-      ragePlayers: { yellow: false, blue: false, red: false, green: false }
+      ragePlayers: { yellow: false, blue: false, red: false, green: false },
+      winners: [],
+      gameFinished: false
     });
     get().updateLeaderboard();
   },
 
   exitGame: () => {
-    set({ gameStarted: false });
+    set({ gameStarted: false, gameFinished: false, winners: [] });
   },
 
   passTurn: () => {
     set((state) => {
-      const currentIndex = state.activeColors.indexOf(state.currentPlayerTurn);
-      const nextTurn = state.activeColors[(currentIndex + 1) % state.activeColors.length];
+      if (state.gameFinished) return {};
+      const nextTurn = getNextTurnColor(state.currentPlayerTurn, state.activeColors, state.players);
       return { 
         currentPlayerTurn: nextTurn, 
         diceValue: null, 
@@ -145,7 +166,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   rollDice: () => {
     const state = get();
-    if (state.hasRolled || state.isAnimating) return;
+    if (state.hasRolled || state.isAnimating || state.gameFinished) return;
     
     let randomNum = Math.floor(Math.random() * 6) + 1;
     if (typeof window !== 'undefined' && window.crypto) {
@@ -186,7 +207,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const validTokens = currentPlayer.tokens.filter(t => {
         if (t.isFinished) return false;
         if (t.position === -1) return randomNum === 6; 
-        return (t.position + randomNum) <= 56; // Exact 56 win lock
+        return (t.position + randomNum) <= 56; 
       });
 
       if (validTokens.length === 0) {
@@ -226,7 +247,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         set({ recommendedTokenId: bestTokenId });
 
-        // BULLETPROOF AI MOTOR: Robot Bina Ruke Khud Token Move Karega
         if (state.isRobotMode && state.currentPlayerTurn !== 'yellow') {
           setTimeout(() => {
             const chosenTokenId = bestTokenId || validTokens[Math.floor(Math.random() * validTokens.length)].id;
@@ -243,7 +263,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   moveToken: (playerColor, tokenId) => {
     const state = get();
-    if (state.currentPlayerTurn !== playerColor || !state.hasRolled || !state.diceValue || state.isAnimating) return;
+    if (state.currentPlayerTurn !== playerColor || !state.hasRolled || !state.diceValue || state.isAnimating || state.gameFinished) return;
 
     const diceVal = state.diceValue;
 
@@ -270,7 +290,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         
         if (newRelativePos === 56) { 
           token.isFinished = true;
-          getsExtraTurn = true; 
         }
       }
 
@@ -287,7 +306,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           if (p.color !== playerColor && prevState.activeColors.includes(p.color)) {
             p.tokens.forEach(enemyToken => {
               const enemyGlobal = getGlobalPosition(p.color, enemyToken.position);
-              if (enemyGlobal === enemyGlobal && enemyToken.position !== -1 && enemyGlobal === newGlobalPos) {
+              if (enemyToken.position !== -1 && enemyGlobal === newGlobalPos) {
                 enemyToken.position = -1; 
                 getsExtraTurn = true;    
                 killedSomeone = true;
@@ -298,6 +317,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       if (killedSomeone) currentKills++;
+
+      // Check if this player just won (All 4 tokens finished)
+      const finishedCount = newPlayers[playerIndex].tokens.filter(t => t.isFinished).length;
+      const playerJustWon = finishedCount === 4;
+
+      let updatedWinners = [...prevState.winners];
+      if (playerJustWon && !updatedWinners.includes(playerColor)) {
+        updatedWinners.push(playerColor);
+      }
+
+      // Game finishes when:
+      // - 3 players have won (in a 4-player game)
+      // - Or active colors minus 1 player have finished
+      const maxPossibleWinners = Math.min(3, prevState.activeColors.length - 1);
+      const isGameOver = updatedWinners.length >= maxPossibleWinners;
 
       const nextSafeTokens = { ...prevState.safeTokens };
       newPlayers.forEach(p => {
@@ -316,11 +350,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       nextRagePlayers[playerColor] = outTokens.length === 1;
 
       let nextTurn = prevState.currentPlayerTurn;
-      if (diceVal === 6 || killedSomeone) getsExtraTurn = true; 
+      
+      // If dice is 6 or killed someone, they get extra turn, EXCEPT if they just finished all 4 tokens!
+      if ((diceVal === 6 || killedSomeone) && !playerJustWon) {
+        getsExtraTurn = true;
+      } else {
+        getsExtraTurn = false;
+      }
 
       if (!getsExtraTurn) {
-        const currentIndex = prevState.activeColors.indexOf(nextTurn);
-        nextTurn = prevState.activeColors[(currentIndex + 1) % prevState.activeColors.length];
+        nextTurn = getNextTurnColor(nextTurn, prevState.activeColors, newPlayers);
         set({ sixStreakCount: 0 });
       }
 
@@ -329,12 +368,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       setTimeout(() => {
         useGameStore.setState({ 
-          currentPlayerTurn: nextTurn, 
+          currentPlayerTurn: isGameOver ? prevState.currentPlayerTurn : nextTurn, 
           diceValue: null, 
           hasRolled: false,
           isAnimating: false,
           hoveredTokenId: null,
-          recommendedTokenId: null
+          recommendedTokenId: null,
+          winners: updatedWinners,
+          gameFinished: isGameOver
         });
         get().updateLeaderboard();
       }, animationTime);
