@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, memo, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
-import { useGameStore } from '../store/useGameStore';
+import { useGameStore, playAudio } from '../store/useGameStore';
 import LudoBoard from './components/LudoBoard';
 import { Color } from '../types/game';
 
@@ -63,6 +63,9 @@ const PlayerBox = memo(({ color, name }: { color: Color, name: string }) => {
     if (!isActive || isRolling || hasRolled || isAnimating || clickLockRef.current) return; 
     clickLockRef.current = true;
     setIsRolling(true);
+    
+    // PLAY AUDIO FOR DICE ROLL
+    playAudio('roll');
     
     const speed = isFastMode ? 40 : 70;
     const duration = isFastMode ? 250 : 500;
@@ -154,24 +157,25 @@ const SettingsModal = ({ isOpen, onClose, onQuit }: { isOpen: boolean, onClose: 
   const setPreferences = useGameStore((state: any) => state.setPreferences);
   const animationType = useGameStore((state: any) => state.animationType);
   const isFastMode = useGameStore((state: any) => state.isFastMode);
+  const soundEnabled = useGameStore((state: any) => state.soundEnabled);
 
-  // New State for Quit Warning
   const [showWarning, setShowWarning] = useState(false);
 
-  // Reset warning when modal closes
   useEffect(() => {
-    if (!isOpen) {
-      setShowWarning(false);
-    }
+    if (!isOpen) setShowWarning(false);
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const togglePref = (pref: any) => {
+    playAudio('click');
+    setPreferences(pref);
+  };
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 transition-all">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-slate-900 border border-slate-700 p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] w-full max-w-sm flex flex-col transform-gpu will-change-transform">
         
-        {/* CONDITION: If warning is true, show only the warning */}
         {showWarning ? (
           <div className="flex flex-col items-center justify-center gap-5 py-4">
             <span className="text-6xl drop-shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse">⚠️</span>
@@ -180,36 +184,41 @@ const SettingsModal = ({ isOpen, onClose, onQuit }: { isOpen: boolean, onClose: 
               If you quit now, your current game progress will be permanently lost.
             </p>
             <div className="flex gap-3 w-full mt-2">
-              <button onClick={() => setShowWarning(false)} className="flex-1 py-4 bg-slate-700 hover:bg-slate-600 text-white font-black rounded-2xl tracking-widest transition-all border border-white/10">CANCEL</button>
-              <button onClick={() => { setShowWarning(false); onClose(); onQuit(); }} className="flex-1 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black rounded-2xl tracking-widest transition-all shadow-[0_0_15px_rgba(239,68,68,0.5)] border border-red-400/30">QUIT</button>
+              <button onClick={() => { playAudio('click'); setShowWarning(false); }} className="flex-1 py-4 bg-slate-700 hover:bg-slate-600 text-white font-black rounded-2xl tracking-widest transition-all border border-white/10">CANCEL</button>
+              <button onClick={() => { playAudio('click'); setShowWarning(false); onClose(); onQuit(); }} className="flex-1 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black rounded-2xl tracking-widest transition-all shadow-[0_0_15px_rgba(239,68,68,0.5)] border border-red-400/30">QUIT</button>
             </div>
           </div>
         ) : (
-          /* OTHERWISE SHOW NORMAL SETTINGS */
           <div className="flex flex-col gap-6">
             <h2 className="text-2xl font-black text-white tracking-widest text-center border-b border-slate-700/50 pb-4">⚙️ SETTINGS</h2>
             
-            {/* Token Animation Toggle */}
+            {/* SOUND TOGGLE BUTTON ADDED */}
+            <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+              <label className="text-[10px] sm:text-xs font-black text-slate-300 tracking-wider">SOUND EFFECTS (🔊)</label>
+              <button onClick={() => togglePref({ soundEnabled: !soundEnabled })} className={`w-12 h-6 rounded-full transition-colors relative ${soundEnabled ? 'bg-green-500' : 'bg-slate-600'}`}>
+                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
             <div className="flex flex-col gap-3">
               <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] text-center">TOKEN ANIMATION</label>
               <div className="flex gap-3">
-                <button onClick={() => setPreferences({ animationType: 'jump' })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${animationType === 'jump' ? 'border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>🦘 JUMP</button>
-                <button onClick={() => setPreferences({ animationType: 'smooth' })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${animationType === 'smooth' ? 'border-green-500 bg-green-500/20 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>⛸️ SMOOTH</button>
+                <button onClick={() => togglePref({ animationType: 'jump' })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${animationType === 'jump' ? 'border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>🦘 JUMP</button>
+                <button onClick={() => togglePref({ animationType: 'smooth' })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${animationType === 'smooth' ? 'border-green-500 bg-green-500/20 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>⛸️ SMOOTH</button>
               </div>
             </div>
 
-            {/* Game Speed Toggle */}
             <div className="flex flex-col gap-3">
               <label className="text-[10px] font-black text-slate-500 tracking-[0.2em] text-center">GAME SPEED</label>
               <div className="flex gap-3">
-                <button onClick={() => setPreferences({ isFastMode: false })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${!isFastMode ? 'border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>🐢 NORMAL</button>
-                <button onClick={() => setPreferences({ isFastMode: true })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${isFastMode ? 'border-red-500 bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>⚡ FAST</button>
+                <button onClick={() => togglePref({ isFastMode: false })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${!isFastMode ? 'border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>🐢 NORMAL</button>
+                <button onClick={() => togglePref({ isFastMode: true })} className={`flex-1 py-3 text-xs sm:text-sm font-black tracking-widest rounded-xl transition-all duration-300 border-2 ${isFastMode ? 'border-red-500 bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:text-white'}`}>⚡ FAST</button>
               </div>
             </div>
 
             <div className="flex gap-3 mt-2">
-              <button onClick={onClose} className="flex-1 py-4 bg-slate-700 hover:bg-slate-600 text-white font-black rounded-2xl tracking-widest transition-all active:scale-95 border border-white/10 shadow-lg">CLOSE</button>
-              <button onClick={() => setShowWarning(true)} className="flex-1 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black rounded-2xl tracking-widest transition-all active:scale-95 border border-red-500/50 shadow-lg">QUIT GAME</button>
+              <button onClick={() => { playAudio('click'); onClose(); }} className="flex-1 py-4 bg-slate-700 hover:bg-slate-600 text-white font-black rounded-2xl tracking-widest transition-all active:scale-95 border border-white/10 shadow-lg">CLOSE</button>
+              <button onClick={() => { playAudio('warn'); setShowWarning(true); }} className="flex-1 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black rounded-2xl tracking-widest transition-all active:scale-95 border border-red-500/50 shadow-lg">QUIT GAME</button>
             </div>
           </div>
         )}
@@ -229,6 +238,21 @@ export default function Home() {
   const [selectedPlayers, setSelectedPlayers] = useState(2);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  const handleModeChange = (mode: 'COMPUTER' | 'FRIENDS') => {
+    playAudio('click');
+    setModeTab(mode);
+  };
+
+  const handlePlayerChange = (num: number) => {
+    playAudio('click');
+    setSelectedPlayers(num);
+  };
+
+  const handleStartGame = () => {
+    playAudio('start');
+    startGame(selectedPlayers, modeTab === 'COMPUTER');
+  };
+
   if (!gameStarted) {
     return (
       <main className="fixed inset-0 w-screen h-[100dvh] bg-[#060D1A] flex items-center justify-center select-none overflow-hidden p-4 sm:p-6">
@@ -246,7 +270,7 @@ export default function Home() {
 
         <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_center,_#1e293b_0%,_#020617_100%)] z-0" />
 
-        <button onClick={() => setIsSettingsOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-slate-800/80 hover:bg-slate-700 border border-white/10 rounded-full shadow-lg transition-transform hover:scale-110 active:scale-95 text-xl transform-gpu">⚙️</button>
+        <button onClick={() => { playAudio('click'); setIsSettingsOpen(true); }} className="absolute top-6 right-6 z-50 p-3 bg-slate-800/80 hover:bg-slate-700 border border-white/10 rounded-full shadow-lg transition-transform hover:scale-110 active:scale-95 text-xl transform-gpu">⚙️</button>
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onQuit={exitGame} />
 
         <motion.div initial={{ scale: 0.8, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="relative z-10 w-full max-w-lg flex flex-col items-center gap-6 sm:gap-8 transform-gpu will-change-transform">
@@ -259,11 +283,11 @@ export default function Home() {
           <div className="w-full flex flex-col gap-3">
             <p className="text-center text-[10px] sm:text-xs font-black tracking-[0.2em] text-slate-500 uppercase">CHOOSE YOUR MODE</p>
             <div className="flex gap-4">
-              <button onClick={() => setModeTab('COMPUTER')} className={`relative flex-1 flex flex-col items-center justify-center p-4 sm:p-6 rounded-3xl transition-all duration-300 overflow-hidden group ${modeTab === 'COMPUTER' ? 'bg-blue-600/20 border-2 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.4)] scale-105' : 'bg-slate-800/30 border border-slate-700/50 hover:bg-slate-800/60 hover:border-slate-600'}`}>
+              <button onClick={() => handleModeChange('COMPUTER')} className={`relative flex-1 flex flex-col items-center justify-center p-4 sm:p-6 rounded-3xl transition-all duration-300 overflow-hidden group ${modeTab === 'COMPUTER' ? 'bg-blue-600/20 border-2 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.4)] scale-105' : 'bg-slate-800/30 border border-slate-700/50 hover:bg-slate-800/60 hover:border-slate-600'}`}>
                 <span className="text-3xl sm:text-4xl mb-2 group-hover:scale-110 transition-transform transform-gpu">🤖</span>
                 <span className={`text-[10px] sm:text-xs font-black tracking-widest ${modeTab === 'COMPUTER' ? 'text-blue-400' : 'text-slate-400'}`}>VS ROBOT</span>
               </button>
-              <button onClick={() => setModeTab('FRIENDS')} className={`relative flex-1 flex flex-col items-center justify-center p-4 sm:p-6 rounded-3xl transition-all duration-300 overflow-hidden group ${modeTab === 'FRIENDS' ? 'bg-green-600/20 border-2 border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.4)] scale-105' : 'bg-slate-800/30 border border-slate-700/50 hover:bg-slate-800/60 hover:border-slate-600'}`}>
+              <button onClick={() => handleModeChange('FRIENDS')} className={`relative flex-1 flex flex-col items-center justify-center p-4 sm:p-6 rounded-3xl transition-all duration-300 overflow-hidden group ${modeTab === 'FRIENDS' ? 'bg-green-600/20 border-2 border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.4)] scale-105' : 'bg-slate-800/30 border border-slate-700/50 hover:bg-slate-800/60 hover:border-slate-600'}`}>
                 <span className="text-3xl sm:text-4xl mb-2 group-hover:scale-110 transition-transform transform-gpu">🧑‍🤝‍🧑</span>
                 <span className={`text-[10px] sm:text-xs font-black tracking-widest ${modeTab === 'FRIENDS' ? 'text-green-400' : 'text-slate-400'}`}>VS FRIENDS</span>
               </button>
@@ -274,14 +298,14 @@ export default function Home() {
             <p className="text-center text-[10px] sm:text-xs font-black tracking-[0.2em] text-slate-500 uppercase">NUMBER OF PLAYERS</p>
             <div className="flex justify-center gap-4 sm:gap-6">
               {[2, 3, 4].map(num => (
-                <button key={num} onClick={() => setSelectedPlayers(num)} className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-lg sm:text-xl font-black transition-all duration-300 border-2 transform-gpu ${selectedPlayers === num ? 'bg-gradient-to-tr from-yellow-400 to-amber-600 border-yellow-300 text-slate-900 shadow-[0_0_20px_rgba(251,191,36,0.6)] scale-110' : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white hover:border-slate-500'}`}>
+                <button key={num} onClick={() => handlePlayerChange(num)} className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-lg sm:text-xl font-black transition-all duration-300 border-2 transform-gpu ${selectedPlayers === num ? 'bg-gradient-to-tr from-yellow-400 to-amber-600 border-yellow-300 text-slate-900 shadow-[0_0_20px_rgba(251,191,36,0.6)] scale-110' : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white hover:border-slate-500'}`}>
                   {num}
                 </button>
               ))}
             </div>
           </div>
 
-          <button onClick={() => startGame(selectedPlayers, modeTab === 'COMPUTER')} className="w-full mt-6 p-5 sm:p-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 rounded-[2rem] font-black text-white shadow-[0_15px_30px_rgba(79,70,229,0.4)] transition-all active:scale-95 border border-white/20 tracking-[0.2em] text-lg sm:text-xl flex items-center justify-center gap-3 group transform-gpu">
+          <button onClick={handleStartGame} className="w-full mt-6 p-5 sm:p-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 rounded-[2rem] font-black text-white shadow-[0_15px_30px_rgba(79,70,229,0.4)] transition-all active:scale-95 border border-white/20 tracking-[0.2em] text-lg sm:text-xl flex items-center justify-center gap-3 group transform-gpu">
             <span>START GAME</span>
             <span className="group-hover:translate-x-2 transition-transform text-2xl transform-gpu">🚀</span>
           </button>
@@ -296,27 +320,23 @@ export default function Home() {
     <main className="fixed inset-0 w-screen h-[100dvh] overflow-hidden flex flex-col items-center justify-center bg-[#060D1A] select-none touch-none p-1 sm:p-2 md:p-6">
       <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
-      {/* ONLY SETTINGS BUTTON OUTSIDE, QUIT REMOVED FROM HERE */}
       <div className="absolute top-2 right-2 md:top-6 md:right-6 z-[60] flex gap-2">
-        <button onClick={() => setIsSettingsOpen(true)} className="px-3 py-1.5 md:px-4 md:py-2 bg-slate-800 text-slate-300 border border-slate-600 rounded-full text-sm md:text-lg font-bold hover:bg-slate-700 transition-colors flex items-center justify-center shadow-lg transform-gpu active:scale-95">⚙️</button>
+        <button onClick={() => { playAudio('click'); setIsSettingsOpen(true); }} className="px-3 py-1.5 md:px-4 md:py-2 bg-slate-800 text-slate-300 border border-slate-600 rounded-full text-sm md:text-lg font-bold hover:bg-slate-700 transition-colors flex items-center justify-center shadow-lg transform-gpu active:scale-95">⚙️</button>
       </div>
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onQuit={exitGame} />
 
       <div className="relative z-20 w-full h-full max-w-[500px] lg:max-w-[1200px] grid grid-cols-2 lg:grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto_auto] lg:grid-rows-[auto_1fr_auto] gap-y-1 sm:gap-y-4 lg:gap-x-8 lg:gap-y-0 items-center justify-items-center content-center mx-auto min-h-0 min-w-0">
         
-        {/* ADDED z-50 EXPLICITLY TO PLAYER BOX CONTAINERS SO THEY ALWAYS FLOAT ABOVE LUDO BOARD */}
         <div className="relative z-50 col-start-1 row-start-1 lg:col-start-1 lg:row-start-1 justify-self-start lg:justify-self-end self-end lg:self-start lg:mt-6"><PlayerBox color="red" name="Player 2" /></div>
         <div className="relative z-50 col-start-2 row-start-1 lg:col-start-3 lg:row-start-1 justify-self-end lg:justify-self-start self-end lg:self-start lg:mt-6"><PlayerBox color="green" name="Player 3" /></div>
         
-        {/* ADDED z-10 EXPLICITLY TO LUDO BOARD CONTAINER SO IT STAYS BELOW DICE */}
         <div className="relative z-10 col-span-2 row-start-2 lg:col-start-2 lg:col-span-1 lg:row-start-1 lg:row-span-3 flex items-center justify-center w-full min-h-0 min-w-0">
           <div className="relative aspect-square w-[min(98vw,calc(100dvh-165px))] lg:w-[85vh] lg:h-[85vh] bg-slate-900 rounded-2xl lg:rounded-[3rem] p-1 sm:p-1.5 lg:p-2 border-[3px] lg:border-8 border-[#0f172a] shadow-[0_0_50px_rgba(0,0,0,0.9)] shrink-0 flex items-center justify-center transform-gpu">
             <LudoBoard />
           </div>
         </div>
         
-        {/* ADDED z-50 EXPLICITLY TO PLAYER BOX CONTAINERS */}
         <div className="relative z-50 col-start-1 row-start-3 lg:col-start-1 lg:row-start-3 justify-self-start lg:justify-self-end self-start lg:self-end lg:mb-6"><PlayerBox color="blue" name="Player 1" /></div>
         <div className="relative z-50 col-start-2 row-start-3 lg:col-start-3 lg:row-start-3 justify-self-end lg:justify-self-start self-start lg:self-end lg:mb-6"><PlayerBox color="yellow" name="YOU" /></div>
         

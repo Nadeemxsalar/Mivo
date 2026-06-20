@@ -1,7 +1,7 @@
 // src/app/components/LudoBoard.tsx
 'use client';
 import React, { useMemo, useEffect, useRef, useState } from 'react';
-import { useGameStore } from '../../store/useGameStore';
+import { useGameStore, playAudio } from '../../store/useGameStore';
 import { Color, Token, START_OFFSETS, Player } from '../../types/game';
 
 // Custom Star SVG
@@ -157,7 +157,6 @@ export default function LudoBoard() {
   const gameFinished = useGameStore((state: any) => state.gameFinished);
   const winners = useGameStore((state: any) => state.winners);
   const exitGame = useGameStore((state: any) => state.exitGame);
-  const activeColors = useGameStore((state: any) => state.activeColors);
 
   const visualPosRef = useRef<Record<string, number>>({});
   const [renderTick, setRenderTick] = useState(0);
@@ -176,7 +175,7 @@ export default function LudoBoard() {
   }, []); 
 
   // =====================================
-  // SILKY SMOOTH REWIND KILL ENGINE
+  // SILKY SMOOTH REWIND & HOP KILL ENGINE (WITH SOUND SYNC)
   // =====================================
   useEffect(() => {
     players.forEach((p: Player) => {
@@ -185,7 +184,10 @@ export default function LudoBoard() {
         const currentVisPos = visualPosRef.current[t.id];
 
         if (currentVisPos !== undefined && currentVisPos !== targetPos) {
+          
           if (targetPos === -1 && currentVisPos > -1) {
+            // KILL ANIMATION
+            playAudio('kill');
             let step = currentVisPos;
             const rewind = () => {
               step = Math.max(-1, step - 1); 
@@ -198,17 +200,26 @@ export default function LudoBoard() {
             setTimeout(rewind, isFastMode ? 25 : 45);
           } 
           else if (targetPos > currentVisPos) {
+            // MOVE FORWARD ANIMATION
+            if (currentVisPos === -1) {
+              playAudio('open');
+            }
             let step = currentVisPos;
             const hop = () => {
               step++;
               visualPosRef.current[t.id] = step;
               setRenderTick(v => v + 1);
+              
+              if (step > 0 && step < 56) playAudio('step');
+              if (step === 56) playAudio('win');
+              
               if (step < targetPos) {
                 setTimeout(hop, stepDuration); 
               }
             };
             setTimeout(hop, stepDuration);
           } else {
+            // Direct Sync
             visualPosRef.current[t.id] = targetPos;
             setRenderTick(v => v + 1);
           }
@@ -415,7 +426,6 @@ export default function LudoBoard() {
 
           let shiftX = 0, shiftY = 0, scale = 0.95;
           
-          // FEATURE 2: PERFECT OVERLAP SYSTEM (No hidden colors on Stars)
           if (totalOverlap > 1 && !t.isFinished && t.visPos < 56 && !isGettingKilled) { 
             scale = totalOverlap > 4 ? 0.45 : 0.55; 
             if (totalOverlap === 2) {
@@ -481,7 +491,6 @@ export default function LudoBoard() {
               >
                 {t.isFinished && <CrownIcon />}
                 
-                {/* FEATURE 1: SHIELD VISIBILITY FIX (Glowing Aura + Badge, NO BLUR!) */}
                 {isSafe && !t.isFinished && (
                   <>
                     <div className="absolute inset-[-15%] rounded-full border-[2.5px] border-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.9)] z-0 pointer-events-none animate-pulse" />
@@ -493,7 +502,6 @@ export default function LudoBoard() {
                   <div className="absolute -top-2 -right-2 z-30 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] text-[12px] bg-red-500 rounded-full w-4 h-4 flex items-center justify-center border border-white">⚡</div>
                 )}
                 
-                {/* SOLID BORDER ADDED WHEN MULTIPLE TOKENS OVERLAP FOR CLARITY */}
                 <div className={`absolute bottom-[-10%] left-[5%] w-[90%] h-[90%] rounded-full ${tokenThemes[t.playerColor as Color].base} shadow-[0_4px_6px_rgba(0,0,0,0.6)] ${totalOverlap > 1 ? 'border border-black' : ''}`} />
                 <div className="absolute inset-0 rounded-full border-[2px] border-white/90 shadow-inner bg-white flex items-center justify-center z-10">
                   <div className={`w-[80%] h-[80%] rounded-full ${tokenThemes[t.playerColor as Color].top} shadow-[inset_0_-2px_4px_rgba(0,0,0,0.5)] flex items-start justify-center pt-[10%]`}>
@@ -506,11 +514,9 @@ export default function LudoBoard() {
         })}
       </div>
 
-      {/* FEATURE 3: GRAND WINNER CELEBRATION MODAL */}
       {gameFinished && winners.length > 0 && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 pointer-events-auto">
           <div className="winner-modal-anim relative w-full max-w-md bg-slate-900 border-2 border-yellow-500 p-8 rounded-[3rem] shadow-[0_0_50px_rgba(234,179,8,0.4)] flex flex-col items-center gap-6 overflow-hidden">
-            {/* Background Shine */}
             <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-transparent pointer-events-none" />
             <div className="absolute inset-0 shine-effect pointer-events-none" />
 
@@ -535,7 +541,7 @@ export default function LudoBoard() {
             </div>
 
             <button 
-              onClick={exitGame}
+              onClick={() => { playAudio('click'); exitGame(); }}
               className="mt-4 w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-2xl font-black text-white text-lg tracking-[0.2em] shadow-[0_10px_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 border border-white/20 z-10"
             >
               BACK TO HOME 🏠

@@ -2,6 +2,134 @@
 import { create } from 'zustand';
 import { Color, Player, START_OFFSETS, SAFE_POSITIONS_GLOBAL, Token } from '../types/game';
 
+// ==========================================
+// ADVANCED LAG-FREE WEB AUDIO SYNTHESIZER
+// ==========================================
+export const playAudio = (type: 'click' | 'roll' | 'start' | 'warn' | 'step' | 'open' | 'kill' | 'win' | 'gameover') => {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const soundEnabled = useGameStore.getState().soundEnabled;
+    if (!soundEnabled) return; // Settings se OFF hone par koi sound nahi aayegi
+
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    
+    if (!(window as any).ludoAudioCtx) {
+      (window as any).ludoAudioCtx = new AudioContext();
+    }
+    const ctx = (window as any).ludoAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+
+    switch (type) {
+      case 'step': // Goti chalne ki awaaz (Tak - Tak)
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+        break;
+        
+      case 'open': // Goti base se bahar aane ki awaaz (Happy Chime)
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.setValueAtTime(600, now + 0.1);
+        osc.frequency.setValueAtTime(800, now + 0.2);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+        break;
+
+      case 'kill': // Dushman ki goti kaatne ki awaaz (Aggressive Drop)
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+
+      case 'win': // Goti andar jane ki awaaz (Triumphant)
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.setValueAtTime(600, now + 0.1);
+        osc.frequency.setValueAtTime(800, now + 0.2);
+        osc.frequency.setValueAtTime(1200, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+
+      case 'click': // UI Buttons ki awaaz
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+
+      case 'roll': // Dice ghumne ki awaaz
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(600, now + 0.15);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+
+      case 'start': // Match start hone ki awaaz
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.setValueAtTime(600, now + 0.1);
+        osc.frequency.setValueAtTime(800, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+        break;
+
+      case 'warn': // Quit warning ki awaaz
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+        
+      case 'gameover': // Match poora khatam hone par
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.setValueAtTime(400, now + 0.2);
+        osc.frequency.setValueAtTime(500, now + 0.4);
+        osc.frequency.setValueAtTime(600, now + 0.6);
+        osc.frequency.setValueAtTime(800, now + 0.8);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 1.2);
+        osc.start(now);
+        osc.stop(now + 1.2);
+        break;
+    }
+  } catch (e) {
+    // Fail silently if audio is blocked by browser policy
+  }
+};
+
 interface GameState {
   players: Player[];
   currentPlayerTurn: Color;
@@ -27,7 +155,7 @@ interface GameState {
   safeTokens: Record<string, boolean>; 
   ragePlayers: Record<Color, boolean>; 
 
-  // NEW MULTI-WINNER STATES
+  // MULTI-WINNER STATES
   winners: Color[];
   gameFinished: boolean;
 
@@ -87,7 +215,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   safeTokens: {},
   ragePlayers: { yellow: false, blue: false, red: false, green: false },
   
-  // INITIAL MULTI-WINNER VALUES
   winners: [],
   gameFinished: false,
 
@@ -318,20 +445,23 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       if (killedSomeone) currentKills++;
 
-      // Check if this player just won (All 4 tokens finished)
       const finishedCount = newPlayers[playerIndex].tokens.filter(t => t.isFinished).length;
       const playerJustWon = finishedCount === 4;
 
       let updatedWinners = [...prevState.winners];
+      let triggeredGameOver = false;
+
       if (playerJustWon && !updatedWinners.includes(playerColor)) {
         updatedWinners.push(playerColor);
       }
 
-      // Game finishes when:
-      // - 3 players have won (in a 4-player game)
-      // - Or active colors minus 1 player have finished
       const maxPossibleWinners = Math.min(3, prevState.activeColors.length - 1);
       const isGameOver = updatedWinners.length >= maxPossibleWinners;
+
+      if (isGameOver && !prevState.gameFinished) {
+        triggeredGameOver = true;
+        playAudio('gameover'); // Play Game Over Sound Instantly
+      }
 
       const nextSafeTokens = { ...prevState.safeTokens };
       newPlayers.forEach(p => {
@@ -351,7 +481,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       let nextTurn = prevState.currentPlayerTurn;
       
-      // If dice is 6 or killed someone, they get extra turn, EXCEPT if they just finished all 4 tokens!
       if ((diceVal === 6 || killedSomeone) && !playerJustWon) {
         getsExtraTurn = true;
       } else {
